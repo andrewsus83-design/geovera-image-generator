@@ -11,22 +11,34 @@ export async function POST(req: NextRequest) {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 10000);
 
-    const res = await fetch(`${endpoint.replace(/\/$/, "")}/health`, {
+    const base = endpoint.replace(/\/$/, "");
+    const headers = {
+      ...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {}),
+    };
+
+    // Try ComfyUI /system_stats first, fallback to /health
+    let res = await fetch(`${base}/system_stats`, {
       method: "GET",
-      headers: {
-        ...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {}),
-      },
+      headers,
       signal: controller.signal,
     });
+
+    // If ComfyUI not found, try generic /health
+    if (!res.ok) {
+      res = await fetch(`${base}/health`, {
+        method: "GET",
+        headers,
+      });
+    }
 
     clearTimeout(timeout);
 
     if (!res.ok) {
-      return NextResponse.json({ error: `Server returned ${res.status}` }, { status: 502 });
+      return NextResponse.json({ error: `Server returned ${res.status} — worker may still be loading` }, { status: 502 });
     }
 
     const data = await res.json().catch(() => ({}));
-    return NextResponse.json({ ok: true, ...data });
+    return NextResponse.json({ ok: true, status: "connected", backend: "comfyui", ...data });
   } catch (err: unknown) {
     if (err instanceof Error && err.name === "AbortError") {
       return NextResponse.json({ error: "Connection timed out (10s)" }, { status: 504 });

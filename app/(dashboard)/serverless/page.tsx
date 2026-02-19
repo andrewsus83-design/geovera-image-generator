@@ -5,10 +5,14 @@ import { GPU_CATALOG } from "@/lib/constants";
 import type { GpuType } from "@/types";
 
 export default function ServerlessPage() {
-  const [endpoint, setEndpoint] = useState("");
-  const [apiKey, setApiKey] = useState("");
+  const [endpoint, setEndpoint] = useState(() =>
+    typeof window !== "undefined" ? localStorage.getItem("vast_endpoint") || "https://run.vast.ai/12463" : "https://run.vast.ai/12463"
+  );
+  const [apiKey, setApiKey] = useState(() =>
+    typeof window !== "undefined" ? localStorage.getItem("vast_api_key") || "" : ""
+  );
   const [gpu, setGpu] = useState<GpuType>("any");
-  const [model, setModel] = useState<"flux_dev" | "flux_schnell" | "sdxl">("flux_dev");
+  const [model, setModel] = useState<"flux_dev" | "flux_schnell" | "sdxl">("flux_schnell");
   const [testing, setTesting] = useState(false);
   const [testResult, setTestResult] = useState<null | { ok: boolean; msg: string }>(null);
   const [saved, setSaved] = useState(false);
@@ -17,15 +21,20 @@ export default function ServerlessPage() {
     setTesting(true);
     setTestResult(null);
     try {
-      const res = await fetch("/api/serverless/health", {
+      const res = await fetch("/api/comfy/health", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ endpoint, apiKey }),
       });
       const d = await res.json();
-      setTestResult({ ok: res.ok, msg: res.ok ? `Connected! Model: ${d.model || "ready"}` : d.error });
+      setTestResult({
+        ok: res.ok,
+        msg: res.ok
+          ? `✅ Connected to ComfyUI! Worker is active.`
+          : `❌ ${d.error || "Cannot connect — worker may still be loading"}`,
+      });
     } catch {
-      setTestResult({ ok: false, msg: "Cannot reach endpoint. Check URL and key." });
+      setTestResult({ ok: false, msg: "❌ Cannot reach endpoint. Check URL and key." });
     }
     setTesting(false);
   };
@@ -76,7 +85,7 @@ export default function ServerlessPage() {
               onChange={(e) => setEndpoint(e.target.value)}
             />
             <p className="text-xs text-body mt-1">
-              Found in your vast.ai dashboard under Workergroup → Endpoint URL
+              Format: <code className="bg-gray dark:bg-meta-4 px-1 rounded">https://run.vast.ai/&#123;endpoint_id&#125;</code> — your Endpoint ID is <strong>12463</strong>
             </p>
           </div>
           <div>
