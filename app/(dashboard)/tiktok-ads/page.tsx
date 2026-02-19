@@ -49,11 +49,17 @@ export default function TikTokAdsPage() {
   const [continuity, setContinuity] = useState(false);
   const [continuityArc, setContinuityArc] = useState<ContinuityArc>("journey");
 
-  // Serverless
+  // Serverless (Modal.com)
   const [serverless, setServerless] = useState(true);
-  const [vastEndpoint, setVastEndpoint] = useState("");
-  const [vastKey, setVastKey] = useState("");
-  const [gpu, setGpu] = useState<GpuType>("any");
+  const [modalTokenId, setModalTokenId] = useState(() =>
+    typeof window !== "undefined" ? localStorage.getItem("modal_token_id") || "" : ""
+  );
+  const [modalTokenSecret, setModalTokenSecret] = useState(() =>
+    typeof window !== "undefined" ? localStorage.getItem("modal_token_secret") || "" : ""
+  );
+  const [gpu, setGpu] = useState<GpuType>(() =>
+    (typeof window !== "undefined" ? (localStorage.getItem("modal_gpu") as GpuType) : null) ?? "t4"
+  );
 
   // UI state
   const [open, setOpen] = useState<Record<Section, boolean>>({
@@ -113,8 +119,8 @@ export default function TikTokAdsPage() {
     formData.append("continuity", String(continuity));
     formData.append("continuityArc", continuityArc);
     formData.append("serverless", String(serverless));
-    formData.append("vastEndpoint", vastEndpoint);
-    formData.append("vastKey", vastKey);
+    formData.append("modalTokenId", modalTokenId);
+    formData.append("modalTokenSecret", modalTokenSecret);
     formData.append("gpu", gpu);
 
     try {
@@ -530,12 +536,12 @@ export default function TikTokAdsPage() {
         {/* Right column — Serverless + Generate */}
         <div className="space-y-4">
 
-          {/* Serverless config */}
-          <Section id="serverless" title="vast.ai Serverless" icon={<Cpu size={18} />}>
+          {/* Serverless config — Modal.com */}
+          <Section id="serverless" title="Modal.com Serverless" icon={<Cpu size={18} />}>
             <div className="flex items-center justify-between mb-4">
               <div>
                 <p className="text-sm font-medium text-black dark:text-white">Use Serverless GPU</p>
-                <p className="text-xs text-body mt-0.5">No local GPU required</p>
+                <p className="text-xs text-body mt-0.5">Modal.com · pay per second · no idle cost</p>
               </div>
               <button
                 onClick={() => setServerless(!serverless)}
@@ -548,30 +554,33 @@ export default function TikTokAdsPage() {
             {serverless && (
               <>
                 <div className="mb-3">
-                  <label className="form-label">Endpoint URL</label>
+                  <label className="form-label">Token ID</label>
                   <input
                     className="form-input"
-                    placeholder="https://your-endpoint.vast.ai"
-                    value={vastEndpoint}
-                    onChange={(e) => setVastEndpoint(e.target.value)}
+                    placeholder="ak-xxxxxxxxxxxxxxxx"
+                    value={modalTokenId}
+                    onChange={(e) => setModalTokenId(e.target.value)}
                   />
                 </div>
                 <div className="mb-3">
-                  <label className="form-label">API Key</label>
+                  <label className="form-label">Token Secret</label>
                   <input
                     type="password"
                     className="form-input"
-                    placeholder="••••••••••••"
-                    value={vastKey}
-                    onChange={(e) => setVastKey(e.target.value)}
+                    placeholder="as-xxxxxxxxxxxxxxxx"
+                    value={modalTokenSecret}
+                    onChange={(e) => setModalTokenSecret(e.target.value)}
                   />
+                  <p className="text-xs text-body mt-1">
+                    Save credentials in <a href="/serverless" className="text-primary underline">GPU Settings</a> to auto-fill
+                  </p>
                 </div>
 
                 {/* GPU selector */}
                 <div>
                   <label className="form-label">GPU Type</label>
                   <div className="space-y-1.5">
-                    {Object.entries(GPU_CATALOG).map(([key, g]) => {
+                    {Object.entries(GPU_CATALOG).filter(([k]) => k !== "any").map(([key, g]) => {
                       const spi = g[modelKey as keyof typeof g] as number | undefined;
                       const costPer = spi && g.price_hr ? ((spi / 3600) * g.price_hr).toFixed(5) : null;
                       return (
@@ -585,7 +594,6 @@ export default function TikTokAdsPage() {
                             <span className={`text-sm font-medium ${gpu === key ? "text-primary" : "text-black dark:text-white"}`}>{g.name}</span>
                             <div className="text-right">
                               {g.price_hr && <span className="text-xs text-body">${g.price_hr}/hr</span>}
-                              {!g.price_hr && <span className="text-xs text-success">Auto</span>}
                             </div>
                           </div>
                           {g.vram_gb && (
@@ -615,7 +623,7 @@ export default function TikTokAdsPage() {
                 { label: "Themes", value: `${themeCount} themes × ${numImages} = ${totalImages} images` },
                 { label: "Strength", value: strength.toFixed(2) },
                 { label: "Continuity", value: continuity ? `✓ ${CONTINUITY_ARCS[continuityArc].label}` : "Off" },
-                { label: "Backend", value: serverless ? "vast.ai Serverless" : "Local GPU" },
+                { label: "Backend", value: serverless ? "Modal.com Serverless" : "Local GPU" },
                 ...(serverless && gpu !== "any" ? [
                   { label: "GPU", value: GPU_CATALOG[gpu].name },
                   ...(estSecs ? [{ label: "Est. Time", value: `~${Math.ceil(estSecs / 60)}m` }] : []),

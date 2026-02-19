@@ -6,7 +6,7 @@ export type PropMode = "upload" | "trained";
 export type ScreenRatio = "9:16" | "4:3" | "1:1" | "16:9" | "3:4";
 export type FluxVariant = "dev" | "schnell";
 export type ContinuityArc = "journey" | "transformation" | "adventure" | "emotion";
-export type GpuType = "any" | "rtx3090" | "rtx3090ti" | "rtx4080" | "rtx4090" | "rtx5090" | "a100" | "h100";
+export type GpuType = "any" | "t4" | "a10g" | "a100" | "h100";
 export type JobStatus = "idle" | "queued" | "running" | "done" | "error";
 
 export interface GenerationParams {
@@ -45,10 +45,10 @@ export interface GenerationParams {
   continuity: boolean;
   continuityArc: ContinuityArc;
 
-  // Serverless
+  // Serverless (Modal.com)
   serverless: boolean;
-  vastEndpoint?: string;
-  vastKey?: string;
+  modalTokenId?: string;
+  modalTokenSecret?: string;
   gpu: GpuType;
 
   // Upload

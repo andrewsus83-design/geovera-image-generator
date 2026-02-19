@@ -89,16 +89,13 @@ export const CONTINUITY_ARCS: Record<string, ContinuityArcInfo> = {
   },
 };
 
-// ── GPU Catalog ─────────────────────────────────────────────────
+// ── GPU Catalog (Modal.com pricing) ─────────────────────────────
 export const GPU_CATALOG: Record<string, GpuInfo> = {
-  any:      { name: "Any (cheapest available)", vram_gb: null, price_hr: null, tier: "auto" },
-  rtx3090:  { name: "RTX 3090",   vram_gb: 24, price_hr: 0.13, tier: "budget", flux_dev_s: 25, flux_schnell_s: 5,   sdxl_s: 8 },
-  rtx3090ti:{ name: "RTX 3090 Ti",vram_gb: 24, price_hr: 0.18, tier: "budget", flux_dev_s: 22, flux_schnell_s: 4,   sdxl_s: 7 },
-  rtx4080:  { name: "RTX 4080",   vram_gb: 16, price_hr: 0.20, tier: "mid",    flux_dev_s: 20, flux_schnell_s: 4,   sdxl_s: 6 },
-  rtx4090:  { name: "RTX 4090",   vram_gb: 24, price_hr: 0.29, tier: "mid",    flux_dev_s: 15, flux_schnell_s: 3,   sdxl_s: 5 },
-  rtx5090:  { name: "RTX 5090",   vram_gb: 32, price_hr: 0.37, tier: "mid",    flux_dev_s: 12, flux_schnell_s: 2,   sdxl_s: 4 },
-  a100:     { name: "A100 80GB",  vram_gb: 80, price_hr: 1.65, tier: "high",   flux_dev_s: 10, flux_schnell_s: 2,   sdxl_s: 3 },
-  h100:     { name: "H100 SXM",   vram_gb: 80, price_hr: 1.65, tier: "high",   flux_dev_s: 8,  flux_schnell_s: 1.5, sdxl_s: 2.5 },
+  any:  { name: "T4 (default)", vram_gb: 16, price_hr: 0.59, tier: "budget", flux_dev_s: 22, flux_schnell_s: 4, sdxl_s: 8 },
+  t4:   { name: "T4 16GB",      vram_gb: 16, price_hr: 0.59, tier: "budget", flux_dev_s: 22, flux_schnell_s: 4, sdxl_s: 8 },
+  a10g: { name: "A10G 24GB",    vram_gb: 24, price_hr: 1.10, tier: "mid",    flux_dev_s: 14, flux_schnell_s: 3, sdxl_s: 5 },
+  a100: { name: "A100 40GB",    vram_gb: 40, price_hr: 3.04, tier: "high",   flux_dev_s: 8,  flux_schnell_s: 2, sdxl_s: 3 },
+  h100: { name: "H100",         vram_gb: 80, price_hr: 4.68, tier: "high",   flux_dev_s: 5,  flux_schnell_s: 1, sdxl_s: 2 },
 };
 
 // ── Actor Options ───────────────────────────────────────────────

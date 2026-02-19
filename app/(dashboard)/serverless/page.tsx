@@ -1,17 +1,19 @@
 "use client";
 import { useState } from "react";
-import { Cpu, CheckCircle, AlertCircle, RefreshCw, ExternalLink, Zap, TrendingUp } from "lucide-react";
+import { Cpu, CheckCircle, AlertCircle, RefreshCw, ExternalLink, Zap, TrendingUp, Terminal } from "lucide-react";
 import { GPU_CATALOG } from "@/lib/constants";
 import type { GpuType } from "@/types";
 
 export default function ServerlessPage() {
-  const [endpoint, setEndpoint] = useState(() =>
-    typeof window !== "undefined" ? localStorage.getItem("vast_endpoint") || "https://run.vast.ai/12463" : "https://run.vast.ai/12463"
+  const [tokenId, setTokenId] = useState(() =>
+    typeof window !== "undefined" ? localStorage.getItem("modal_token_id") || "" : ""
   );
-  const [apiKey, setApiKey] = useState(() =>
-    typeof window !== "undefined" ? localStorage.getItem("vast_api_key") || "52b5d9042895c63b4bb2bf9aa660d168735c3df0ed9e33641adfcad36aaa4039" : "52b5d9042895c63b4bb2bf9aa660d168735c3df0ed9e33641adfcad36aaa4039"
+  const [tokenSecret, setTokenSecret] = useState(() =>
+    typeof window !== "undefined" ? localStorage.getItem("modal_token_secret") || "" : ""
   );
-  const [gpu, setGpu] = useState<GpuType>("any");
+  const [gpu, setGpu] = useState<GpuType>(() =>
+    (typeof window !== "undefined" ? (localStorage.getItem("modal_gpu") as GpuType) : null) ?? "t4"
+  );
   const [model, setModel] = useState<"flux_dev" | "flux_schnell" | "sdxl">("flux_schnell");
   const [testing, setTesting] = useState(false);
   const [testResult, setTestResult] = useState<null | { ok: boolean; msg: string }>(null);
@@ -21,28 +23,28 @@ export default function ServerlessPage() {
     setTesting(true);
     setTestResult(null);
     try {
-      const res = await fetch("/api/comfy/health", {
+      const res = await fetch("/api/modal/health", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ endpoint, apiKey }),
+        body: JSON.stringify({ tokenId, tokenSecret }),
       });
       const d = await res.json();
       setTestResult({
-        ok: res.ok,
-        msg: res.ok
-          ? `✅ Connected to ComfyUI! Worker is active.`
-          : `❌ ${d.error || "Cannot connect — worker may still be loading"}`,
+        ok: res.ok && d.ok,
+        msg: d.ok
+          ? `✅ ${d.message ?? "Modal deployment active"}`
+          : `❌ ${d.message ?? d.error ?? "Connection failed"}`,
       });
     } catch {
-      setTestResult({ ok: false, msg: "❌ Cannot reach endpoint. Check URL and key." });
+      setTestResult({ ok: false, msg: "❌ Cannot reach Modal. Check token credentials." });
     }
     setTesting(false);
   };
 
   const save = () => {
-    localStorage.setItem("vast_endpoint", endpoint);
-    localStorage.setItem("vast_api_key", apiKey);
-    localStorage.setItem("vast_gpu", gpu);
+    localStorage.setItem("modal_token_id", tokenId);
+    localStorage.setItem("modal_token_secret", tokenSecret);
+    localStorage.setItem("modal_gpu", gpu);
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);
   };
@@ -59,50 +61,90 @@ export default function ServerlessPage() {
           <Cpu size={22} className="text-primary" />
           GPU & Serverless
         </h1>
-        <p className="text-sm text-body mt-1">Configure vast.ai serverless endpoint and GPU preferences</p>
+        <p className="text-sm text-body mt-1">Configure Modal.com serverless GPU — pay per second, no idle cost</p>
       </div>
 
-      {/* Endpoint config */}
+      {/* Setup guide */}
+      <div className="card p-5 border-l-4 border-primary">
+        <div className="flex items-center gap-2 mb-3">
+          <Terminal size={16} className="text-primary" />
+          <h3 className="font-semibold text-black dark:text-white text-sm">First-time Setup</h3>
+        </div>
+        <ol className="space-y-2 text-sm text-body">
+          <li className="flex gap-2">
+            <span className="font-bold text-primary flex-shrink-0">1.</span>
+            <span>
+              Install Modal CLI:{" "}
+              <code className="bg-gray dark:bg-meta-4 px-1.5 py-0.5 rounded text-xs">pip install modal</code>
+            </span>
+          </li>
+          <li className="flex gap-2">
+            <span className="font-bold text-primary flex-shrink-0">2.</span>
+            <span>
+              Get your tokens from{" "}
+              <a href="https://modal.com/settings/tokens" target="_blank" rel="noreferrer" className="text-primary underline">
+                modal.com/settings/tokens
+              </a>
+            </span>
+          </li>
+          <li className="flex gap-2">
+            <span className="font-bold text-primary flex-shrink-0">3.</span>
+            <span>
+              Deploy the Modal app:{" "}
+              <code className="bg-gray dark:bg-meta-4 px-1.5 py-0.5 rounded text-xs">modal deploy modal_app.py</code>
+            </span>
+          </li>
+          <li className="flex gap-2">
+            <span className="font-bold text-primary flex-shrink-0">4.</span>
+            <span>Paste your Token ID and Token Secret below, then click Test Connection</span>
+          </li>
+        </ol>
+      </div>
+
+      {/* Token config */}
       <div className="card">
         <div className="border-b border-stroke dark:border-strokedark px-6 py-4 flex items-center justify-between">
-          <h2 className="font-semibold text-black dark:text-white">vast.ai Serverless Connection</h2>
+          <h2 className="font-semibold text-black dark:text-white">Modal.com Credentials</h2>
           <a
-            href="https://vast.ai"
+            href="https://modal.com/settings/tokens"
             target="_blank"
             rel="noreferrer"
             className="flex items-center gap-1 text-xs text-primary hover:underline"
           >
-            Open vast.ai <ExternalLink size={12} />
+            Open Modal Dashboard <ExternalLink size={12} />
           </a>
         </div>
         <div className="p-6 space-y-4">
           <div>
-            <label className="form-label">Endpoint URL</label>
+            <label className="form-label">Token ID</label>
             <input
               className="form-input"
-              placeholder="https://xxxxx.vast.ai:PORT"
-              value={endpoint}
-              onChange={(e) => setEndpoint(e.target.value)}
+              placeholder="ak-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+              value={tokenId}
+              onChange={(e) => setTokenId(e.target.value)}
             />
             <p className="text-xs text-body mt-1">
-              Format: <code className="bg-gray dark:bg-meta-4 px-1 rounded">https://run.vast.ai/&#123;endpoint_id&#125;</code> — your Endpoint ID is <strong>12463</strong>
+              Format: <code className="bg-gray dark:bg-meta-4 px-1 rounded">ak-...</code> — from Modal dashboard → Settings → API Tokens
             </p>
           </div>
           <div>
-            <label className="form-label">API Key</label>
+            <label className="form-label">Token Secret</label>
             <input
               type="password"
               className="form-input"
-              placeholder="••••••••••••••••••••"
-              value={apiKey}
-              onChange={(e) => setApiKey(e.target.value)}
+              placeholder="as-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+              value={tokenSecret}
+              onChange={(e) => setTokenSecret(e.target.value)}
             />
+            <p className="text-xs text-body mt-1">
+              Format: <code className="bg-gray dark:bg-meta-4 px-1 rounded">as-...</code>
+            </p>
           </div>
 
           <div className="flex items-center gap-3">
             <button
               onClick={testConnection}
-              disabled={!endpoint || testing}
+              disabled={!tokenId || !tokenSecret || testing}
               className="btn-secondary py-2 px-5 text-sm"
             >
               {testing ? (
@@ -113,7 +155,7 @@ export default function ServerlessPage() {
             </button>
             <button
               onClick={save}
-              disabled={!endpoint}
+              disabled={!tokenId}
               className="btn-primary py-2 px-5 text-sm"
             >
               {saved ? <><CheckCircle size={14} />Saved!</> : "Save Settings"}
@@ -133,7 +175,7 @@ export default function ServerlessPage() {
       {/* GPU Comparison Table */}
       <div className="card">
         <div className="border-b border-stroke dark:border-strokedark px-6 py-4 flex flex-wrap items-center justify-between gap-3">
-          <h2 className="font-semibold text-black dark:text-white">GPU Comparison</h2>
+          <h2 className="font-semibold text-black dark:text-white">Modal GPU Comparison</h2>
           <div className="flex gap-2">
             {(["flux_dev", "flux_schnell", "sdxl"] as const).map((m) => (
               <button
@@ -206,7 +248,7 @@ export default function ServerlessPage() {
 
         <div className="px-6 py-4 flex items-center gap-2 text-xs text-body border-t border-stroke dark:border-strokedark">
           <Zap size={12} className="text-warning" />
-          Pricing estimates based on per-second billing. Actual costs depend on model load time and vast.ai market rates.
+          Modal bills per second · Cold start ~10s (first request) · Model cached after first run
         </div>
       </div>
 
@@ -218,9 +260,9 @@ export default function ServerlessPage() {
         </div>
         <div className="grid gap-3 sm:grid-cols-3">
           {[
-            { tier: "Budget", gpu: "RTX 3090 / 3090 Ti", use: "Testing, low-volume batches, schnell model", color: "border-success/30 bg-success/5" },
-            { tier: "Mid-Range", gpu: "RTX 4090 / 5090", use: "Production ads, Flux dev model, 30-theme batches", color: "border-warning/30 bg-warning/5" },
-            { tier: "High-End", gpu: "A100 / H100", use: "Fastest throughput, high-volume commercial campaigns", color: "border-primary/30 bg-primary/5" },
+            { tier: "Budget", gpu: "T4 16GB — $0.59/hr", use: "Testing, Flux Schnell, low-volume batches", color: "border-success/30 bg-success/5" },
+            { tier: "Mid-Range", gpu: "A10G 24GB — $1.10/hr", use: "Production ads, Flux Dev, 30-theme batches", color: "border-warning/30 bg-warning/5" },
+            { tier: "High-End", gpu: "A100 / H100", use: "Fastest throughput, high-volume campaigns", color: "border-primary/30 bg-primary/5" },
           ].map((t) => (
             <div key={t.tier} className={`rounded border p-4 ${t.color}`}>
               <p className="text-sm font-semibold text-black dark:text-white">{t.tier}</p>
