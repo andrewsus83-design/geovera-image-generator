@@ -9,7 +9,7 @@ export default function ServerlessPage() {
     typeof window !== "undefined" ? localStorage.getItem("vast_endpoint") || "https://run.vast.ai/12463" : "https://run.vast.ai/12463"
   );
   const [apiKey, setApiKey] = useState(() =>
-    typeof window !== "undefined" ? localStorage.getItem("vast_api_key") || "" : ""
+    typeof window !== "undefined" ? localStorage.getItem("vast_api_key") || "52b5d9042895c63b4bb2bf9aa660d168735c3df0ed9e33641adfcad36aaa4039" : "52b5d9042895c63b4bb2bf9aa660d168735c3df0ed9e33641adfcad36aaa4039"
   );
   const [gpu, setGpu] = useState<GpuType>("any");
   const [model, setModel] = useState<"flux_dev" | "flux_schnell" | "sdxl">("flux_schnell");
