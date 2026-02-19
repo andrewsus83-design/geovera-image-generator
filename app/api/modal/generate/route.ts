@@ -1,42 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
-import { spawn } from "child_process";
-import path from "path";
 
-// ── Helper: run Modal function via CLI ────────────────────────────
-function runModalFunction(
-  args: string[],
-  env: Record<string, string>,
-  timeoutMs = 300000
-): Promise<{ stdout: string; stderr: string }> {
-  return new Promise((resolve, reject) => {
-    const modal = spawn("modal", args, {
-      env: { ...process.env, ...env },
-      cwd: process.cwd(),
-    });
-
-    let stdout = "";
-    let stderr = "";
-    modal.stdout.on("data", (d) => (stdout += d.toString()));
-    modal.stderr.on("data", (d) => (stderr += d.toString()));
-
-    const timer = setTimeout(() => {
-      modal.kill();
-      reject(new Error("Modal function timed out"));
-    }, timeoutMs);
-
-    modal.on("close", (code) => {
-      clearTimeout(timer);
-      if (code === 0) {
-        resolve({ stdout, stderr });
-      } else {
-        reject(new Error(`Modal exited with code ${code}: ${stderr}`));
-      }
-    });
-    modal.on("error", (err) => {
-      clearTimeout(timer);
-      reject(err);
-    });
-  });
+// ── Modal web endpoint URL ─────────────────────────────────────────
+// Set MODAL_GENERATE_URL in Vercel env vars after: modal deploy modal_app.py
+// Format: https://<workspace>--geovera-flux-generate-endpoint.modal.run
+function getModalUrl(type: "generate" | "tiktok-batch"): string | null {
+  if (type === "generate")     return process.env.MODAL_GENERATE_URL     ?? null;
+  if (type === "tiktok-batch") return process.env.MODAL_TIKTOK_BATCH_URL ?? null;
+  return null;
 }
 
 // ── Main handler ──────────────────────────────────────────────────
@@ -50,110 +20,78 @@ export async function POST(req: NextRequest) {
       steps = 4,
       seed = Math.floor(Math.random() * 999999),
       numImages = 1,
-      sourceImage,   // base64 string (optional)
+      sourceImage,     // base64 string (optional — enables img2img)
       strength = 0.75,
       modelVariant = "schnell",
-      gpu = "T4",
     } = body;
 
-    if (!prompt) return NextResponse.json({ error: "prompt required" }, { status: 400 });
+    if (!prompt) {
+      return NextResponse.json({ error: "prompt required" }, { status: 400 });
+    }
 
-    // Modal credentials from Vercel/Supabase environment secrets
-    const modalEnv: Record<string, string> = {};
-    if (process.env.MODAL_TOKEN_ID)     modalEnv.MODAL_TOKEN_ID     = process.env.MODAL_TOKEN_ID;
-    if (process.env.MODAL_TOKEN_SECRET) modalEnv.MODAL_TOKEN_SECRET  = process.env.MODAL_TOKEN_SECRET;
+    const modalUrl = getModalUrl("generate");
+    if (!modalUrl) {
+      return NextResponse.json(
+        {
+          error: "MODAL_GENERATE_URL not set. Add it to Vercel env vars after deploying modal_app.py",
+          hint: "modal deploy modal_app.py → copy the generate-endpoint URL",
+        },
+        { status: 503 }
+      );
+    }
 
-    // GPU map: UI key → Modal GPU string
-    const gpuMap: Record<string, string> = {
-      t4: "T4", a10g: "A10G", a100: "A100-40GB", h100: "H100",
-      any: "T4",
+    // Build request payload for Modal web endpoint
+    const payload: Record<string, unknown> = {
+      prompt,
+      width,
+      height,
+      num_images:     numImages,
+      num_steps:      steps,
+      guidance_scale: modelVariant === "dev" ? 3.5 : 0.0,
+      seed,
+      model_variant:  modelVariant,
     };
-    const modalGpu = gpuMap[gpu] ?? "T4";
-
-    let result: { stdout: string; stderr: string };
 
     if (sourceImage) {
-      // img2img
-      const payload = JSON.stringify({
-        source_b64: sourceImage,
-        prompt,
-        strength,
-        width,
-        height,
-        num_images: numImages,
-        num_steps: steps,
-        seed,
-        model_variant: modelVariant,
-      });
-
-      result = await runModalFunction(
-        [
-          "run",
-          path.join(process.cwd(), "modal_app.py") + "::generate_variation",
-          "--json-input",
-          payload,
-          "--gpu",
-          modalGpu,
-        ],
-        modalEnv
-      );
-    } else {
-      // txt2img
-      const payload = JSON.stringify({
-        prompt,
-        width,
-        height,
-        num_images: numImages,
-        num_steps: steps,
-        guidance_scale: modelVariant === "dev" ? 3.5 : 0.0,
-        seed,
-        model_variant: modelVariant,
-      });
-
-      result = await runModalFunction(
-        [
-          "run",
-          path.join(process.cwd(), "modal_app.py") + "::generate",
-          "--json-input",
-          payload,
-          "--gpu",
-          modalGpu,
-        ],
-        modalEnv
-      );
+      payload.source_b64 = sourceImage;
+      payload.strength   = strength;
     }
 
-    // Parse JSON output from Modal function
-    // Modal prints the return value as JSON on stdout
-    const lines = result.stdout.trim().split("\n");
-    // Find the last line that is valid JSON
-    let parsed: { images: string[]; time: number; model?: string } | null = null;
-    for (let i = lines.length - 1; i >= 0; i--) {
-      try {
-        parsed = JSON.parse(lines[i]);
-        break;
-      } catch {
-        // not JSON, try previous line
-      }
-    }
+    // Call Modal web endpoint directly via fetch (works in Vercel serverless)
+    const modalRes = await fetch(modalUrl, {
+      method:  "POST",
+      headers: { "Content-Type": "application/json" },
+      body:    JSON.stringify(payload),
+      // Modal web endpoints have a max timeout — Vercel max is 300s on Pro
+    });
 
-    if (!parsed || !parsed.images) {
+    if (!modalRes.ok) {
+      const errText = await modalRes.text();
       return NextResponse.json(
-        { error: "Modal returned unexpected output", raw: result.stdout.slice(-1000) },
+        { error: `Modal returned ${modalRes.status}`, detail: errText.slice(0, 500) },
+        { status: 502 }
+      );
+    }
+
+    const data = await modalRes.json() as { images: string[]; time: number; model?: string };
+
+    if (!data.images) {
+      return NextResponse.json(
+        { error: "Modal returned unexpected output", raw: JSON.stringify(data).slice(0, 500) },
         { status: 502 }
       );
     }
 
     // Add data URI prefix if not present
-    const images = parsed.images.map((b64: string) =>
+    const images = data.images.map((b64: string) =>
       b64.startsWith("data:") ? b64 : `data:image/png;base64,${b64}`
     );
 
     return NextResponse.json({
-      ok: true,
+      ok:    true,
       images,
-      time: parsed.time,
-      model: parsed.model ?? `flux-${modelVariant}`,
+      time:  data.time,
+      model: data.model ?? `flux-${modelVariant}`,
     });
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : "Unknown error";

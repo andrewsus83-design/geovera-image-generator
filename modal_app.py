@@ -6,6 +6,12 @@ Deploy:
 Run (test locally):
     modal run modal_app.py
 
+Web Endpoints (after deploy):
+    POST https://<workspace>--geovera-flux-generate-endpoint.modal.run
+    POST https://<workspace>--geovera-flux-generate-variation-endpoint.modal.run
+    POST https://<workspace>--geovera-flux-tiktok-batch-endpoint.modal.run
+    GET  https://<workspace>--geovera-flux-health-endpoint.modal.run
+
 Secrets (set via Modal dashboard → Secrets):
     geovera-hf-secret  — contains HF_TOKEN (optional, only needed for Flux.1-dev)
     Create at: https://modal.com/secrets → New Secret → Hugging Face
@@ -41,6 +47,7 @@ image = (
         "Pillow>=10.0.0",
         "numpy>=1.24.0",
         "huggingface_hub>=0.20.0",
+        "fastapi[standard]>=0.111.0",
     )
     .env({"PYTHONUNBUFFERED": "1"})
 )
@@ -113,7 +120,16 @@ def _load_flux_img2img(variant: str = "schnell"):
     return pipe
 
 
-# ── Functions ─────────────────────────────────────────────────────
+# ── Web Endpoint: health check ────────────────────────────────────
+
+@app.function(image=modal.Image.debian_slim(python_version="3.11").pip_install("fastapi[standard]>=0.111.0"))
+@modal.web_endpoint(method="GET", label="health-endpoint")
+def health_endpoint():
+    """Health check — no GPU needed."""
+    return {"ok": True, "app": "geovera-flux", "status": "deployed"}
+
+
+# ── Web Endpoint: text-to-image & img2img ─────────────────────────
 
 @app.function(
     gpu="T4",
@@ -123,37 +139,59 @@ def _load_flux_img2img(variant: str = "schnell"):
     timeout=300,
     memory=16384,
 )
-def generate(
-    prompt: str,
-    width: int = 768,
-    height: int = 1344,
-    num_images: int = 1,
-    num_steps: int = 4,
-    guidance_scale: float = 0.0,
-    seed: int = 42,
-    model_variant: str = "schnell",
-) -> dict:
-    """Text-to-image generation with Flux Schnell.
+@modal.web_endpoint(method="POST", label="generate-endpoint")
+def generate_endpoint(item: dict) -> dict:
+    """Text-to-image generation via HTTP POST.
 
-    Returns:
-        {"images": [base64_png, ...], "time": float, "model": str}
+    Body JSON:
+        prompt, width, height, num_images, num_steps,
+        guidance_scale, seed, model_variant,
+        source_b64 (optional — enables img2img), strength
     """
     import torch
 
-    t0   = time.time()
-    pipe = _load_flux(model_variant)
+    prompt        = item.get("prompt", "")
+    width         = int(item.get("width", 768))
+    height        = int(item.get("height", 1344))
+    num_images    = int(item.get("num_images", 1))
+    num_steps     = int(item.get("num_steps", 4))
+    guidance_scale= float(item.get("guidance_scale", 0.0))
+    seed          = int(item.get("seed", 42))
+    model_variant = item.get("model_variant", "schnell")
+    source_b64    = item.get("source_b64")
+    strength      = float(item.get("strength", 0.75))
 
-    generator = torch.Generator("cuda").manual_seed(seed)
+    t0 = time.time()
 
-    result = pipe(
-        prompt=prompt,
-        width=width,
-        height=height,
-        num_images_per_prompt=num_images,
-        num_inference_steps=num_steps,
-        guidance_scale=guidance_scale if model_variant == "dev" else 0.0,
-        generator=generator,
-    )
+    if source_b64:
+        # img2img
+        source = _b64_to_img(source_b64).resize((width, height))
+        pipe   = _load_flux_img2img(model_variant)
+        generator = torch.Generator("cuda").manual_seed(seed)
+        result = pipe(
+            prompt=prompt,
+            image=source,
+            strength=strength,
+            width=width,
+            height=height,
+            num_images_per_prompt=num_images,
+            num_inference_steps=max(int(num_steps / strength), num_steps),
+            guidance_scale=0.0,
+            generator=generator,
+        )
+    else:
+        # txt2img
+        pipe = _load_flux(model_variant)
+        generator = torch.Generator("cuda").manual_seed(seed)
+        result = pipe(
+            prompt=prompt,
+            width=width,
+            height=height,
+            num_images_per_prompt=num_images,
+            num_inference_steps=num_steps,
+            guidance_scale=guidance_scale if model_variant == "dev" else 0.0,
+            generator=generator,
+        )
 
     images_b64 = [_img_to_b64(img) for img in result.images]
     elapsed    = round(time.time() - t0, 2)
@@ -166,55 +204,7 @@ def generate(
     }
 
 
-@app.function(
-    gpu="T4",
-    image=image,
-    volumes={"/model-cache": model_volume},
-    secrets=[hf_secret],
-    timeout=300,
-    memory=16384,
-)
-def generate_variation(
-    source_b64: str,
-    prompt: str,
-    strength: float = 0.75,
-    width: int = 768,
-    height: int = 1344,
-    num_images: int = 1,
-    num_steps: int = 4,
-    seed: int = 42,
-    model_variant: str = "schnell",
-) -> dict:
-    """Image-to-image variation with Flux.
-
-    Returns:
-        {"images": [base64_png, ...], "time": float}
-    """
-    import torch
-
-    t0     = time.time()
-    source = _b64_to_img(source_b64).resize((width, height))
-    pipe   = _load_flux_img2img(model_variant)
-
-    generator = torch.Generator("cuda").manual_seed(seed)
-
-    result = pipe(
-        prompt=prompt,
-        image=source,
-        strength=strength,
-        width=width,
-        height=height,
-        num_images_per_prompt=num_images,
-        num_inference_steps=max(int(num_steps / strength), num_steps),
-        guidance_scale=0.0,
-        generator=generator,
-    )
-
-    images_b64 = [_img_to_b64(img) for img in result.images]
-    elapsed    = round(time.time() - t0, 2)
-
-    return {"images": images_b64, "time": elapsed}
-
+# ── Web Endpoint: TikTok batch ────────────────────────────────────
 
 @app.function(
     gpu="T4",
@@ -224,32 +214,29 @@ def generate_variation(
     timeout=600,
     memory=16384,
 )
-def tiktok_batch(
-    subject_description: str,
-    source_b64: str | None = None,
-    theme_ids: list[int] | None = None,
-    screen_ratio: str = "9:16",
-    color: str = "none",
-    num_images_per_theme: int = 1,
-    strength: float = 0.75,
-    seed: int = 42,
-    continuity: bool = False,
-    continuity_arc: str = "journey",
-    model_variant: str = "schnell",
-    num_steps: int = 4,
-) -> dict:
-    """Batch TikTok ad generation across multiple themes.
+@modal.web_endpoint(method="POST", label="tiktok-batch-endpoint")
+def tiktok_batch_endpoint(item: dict) -> dict:
+    """Batch TikTok ad generation via HTTP POST.
 
-    Returns:
-        {"results": [...], "total": int, "time": float}
+    Body JSON:
+        subject_description, source_b64 (optional), theme_ids (optional),
+        screen_ratio, color, num_images_per_theme, strength, seed,
+        continuity, continuity_arc, model_variant, num_steps
     """
-    import sys
     import torch
 
-    # Add project src to path
-    sys.path.insert(0, "/app")
+    subject_description  = item.get("subject_description", "person")
+    source_b64           = item.get("source_b64")
+    theme_ids            = item.get("theme_ids") or list(range(1, 31))
+    screen_ratio         = item.get("screen_ratio", "9:16")
+    color                = item.get("color", "none")
+    num_images_per_theme = int(item.get("num_images_per_theme", 1))
+    strength             = float(item.get("strength", 0.75))
+    seed                 = int(item.get("seed", 42))
+    continuity           = bool(item.get("continuity", False))
+    model_variant        = item.get("model_variant", "schnell")
+    num_steps            = int(item.get("num_steps", 4))
 
-    # Inline SCREEN_RATIOS and theme data (avoid importing full project)
     SCREEN_RATIOS = {
         "9:16":  {"width": 768,  "height": 1344},
         "4:3":   {"width": 1024, "height": 768},
@@ -262,9 +249,6 @@ def tiktok_batch(
     width  = ratio["width"]
     height = ratio["height"]
 
-    if theme_ids is None:
-        theme_ids = list(range(1, 31))
-
     t_start        = time.time()
     source         = _b64_to_img(source_b64).resize((width, height)) if source_b64 else None
     pipe_txt2img   = _load_flux(model_variant)
@@ -275,7 +259,6 @@ def tiktok_batch(
     total          = len(theme_ids)
 
     for idx, theme_id in enumerate(theme_ids):
-        # Build prompt (simplified — full prompt engine in server.py)
         prompt = (
             f"commercial TikTok advertisement photo, theme {theme_id}, "
             f"{subject_description}, "
@@ -286,7 +269,7 @@ def tiktok_batch(
             prompt += f", {color} color palette"
 
         current_source = previous_image if (continuity and previous_image) else source
-        gen_strength   = strength * 0.85  if (continuity and previous_image) else strength
+        gen_strength   = strength * 0.85 if (continuity and previous_image) else strength
 
         t0        = time.time()
         generator = torch.Generator("cuda").manual_seed(seed + idx)
@@ -332,6 +315,47 @@ def tiktok_batch(
         "total":   sum(len(r["images"]) for r in results),
         "time":    round(time.time() - t_start, 2),
     }
+
+
+# ── Legacy functions (for modal run / local testing) ──────────────
+
+@app.function(
+    gpu="T4",
+    image=image,
+    volumes={"/model-cache": model_volume},
+    secrets=[hf_secret],
+    timeout=300,
+    memory=16384,
+)
+def generate(
+    prompt: str,
+    width: int = 768,
+    height: int = 1344,
+    num_images: int = 1,
+    num_steps: int = 4,
+    guidance_scale: float = 0.0,
+    seed: int = 42,
+    model_variant: str = "schnell",
+) -> dict:
+    """Text-to-image (used by modal run for local testing)."""
+    import torch
+
+    t0   = time.time()
+    pipe = _load_flux(model_variant)
+    generator = torch.Generator("cuda").manual_seed(seed)
+    result = pipe(
+        prompt=prompt,
+        width=width,
+        height=height,
+        num_images_per_prompt=num_images,
+        num_inference_steps=num_steps,
+        guidance_scale=guidance_scale if model_variant == "dev" else 0.0,
+        generator=generator,
+    )
+    images_b64 = [_img_to_b64(img) for img in result.images]
+    elapsed    = round(time.time() - t0, 2)
+    print(f"✓ Generated {len(images_b64)} image(s) in {elapsed}s")
+    return {"images": images_b64, "time": elapsed, "model": f"flux-{model_variant}"}
 
 
 # ── CLI entry point (for modal run modal_app.py) ──────────────────
