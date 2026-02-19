@@ -17,7 +17,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 # ── Python dependencies ─────────────────────────────────────────
-# Core inference deps only (no training deps)
 RUN pip install --no-cache-dir \
     diffusers>=0.27.0 \
     transformers>=4.38.0 \
@@ -30,12 +29,15 @@ RUN pip install --no-cache-dir \
     flask>=3.0.0 \
     requests>=2.31.0 \
     numpy>=1.24.0 \
-    opencv-python-headless>=4.8.0
+    opencv-python-headless>=4.8.0 \
+    huggingface_hub>=0.20.0 \
+    vastai-sdk>=0.1.0
 
 # ── Copy project source ─────────────────────────────────────────
 COPY src/ ./src/
 COPY configs/ ./configs/
 COPY serverless/worker.py ./worker.py
+COPY serverless/server.py ./server.py
 COPY serverless/start.sh ./start.sh
 
 RUN chmod +x start.sh
@@ -43,14 +45,14 @@ RUN chmod +x start.sh
 # ── Environment defaults ────────────────────────────────────────
 ENV MODEL_TYPE=flux
 ENV MODEL_VARIANT=schnell
-ENV PORT=8080
+ENV MODEL_SERVER_PORT=8188
 ENV PYTHONUNBUFFERED=1
 ENV PYTHONPATH=/app
 
 # Pre-create HuggingFace cache dir
 RUN mkdir -p /root/.cache/huggingface
 
-EXPOSE 8080
+EXPOSE 8188
 
-# ── Startup: downloads model then starts server ─────────────────
+# ── Startup: starts inference server + PyWorker ─────────────────
 CMD ["./start.sh"]
