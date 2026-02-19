@@ -1,0 +1,80 @@
+# Vast.ai Serverless Configuration
+#
+# Setup:
+#   1. Go to https://cloud.vast.ai/serverless/
+#   2. Create an Endpoint
+#   3. Create one or more Workergroups with different GPU types
+#   4. Set env vars below
+
+serverless:
+  provider: "vast.ai"
+  endpoint_url: null           # Set via VAST_ENDPOINT_URL env var
+  api_key: null                # Set via VAST_API_KEY env var
+  timeout: 300                 # Request timeout (seconds)
+
+# Worker configuration (for vast.ai template setup)
+worker:
+  model_type: "flux"           # "flux" or "sdxl"
+  model_variant: "dev"         # "dev" (quality) or "schnell" (speed)
+  lora_path: null              # Optional LoRA weights path on worker
+  docker_image: "pytorch/pytorch:2.1.0-cuda12.1-cudnn8-runtime"
+
+# ── GPU Options ───────────────────────────────────────────────
+# Configure multiple workergroups in vast.ai dashboard for fallback.
+# vast.ai will automatically route to the cheapest available GPU.
+#
+# VRAM Requirements:
+#   Flux.1-dev  : 24GB+ VRAM (RTX 3090, RTX 4090, A100, H100)
+#   Flux.1 schnell: 16GB+ VRAM (RTX 4080, RTX 3090, RTX 4090, A100)
+#   SDXL        : 10GB+ VRAM (RTX 3080, RTX 4080, RTX 4090, A100)
+
+gpu_options:
+  # Budget tier (~$0.10-0.20/hr)
+  budget:
+    - name: "RTX 3090"
+      vram_gb: 24
+      price_hr: 0.13
+      flux_dev_img_per_hr: 144    # ~25s/img
+      flux_schnell_img_per_hr: 720  # ~5s/img
+
+  # Mid tier (~$0.25-0.50/hr)
+  mid:
+    - name: "RTX 4090"
+      vram_gb: 24
+      price_hr: 0.29
+      flux_dev_img_per_hr: 240    # ~15s/img
+      flux_schnell_img_per_hr: 1200 # ~3s/img
+    - name: "RTX 4080"
+      vram_gb: 16
+      price_hr: 0.20
+      flux_dev_img_per_hr: 180    # ~20s/img
+      flux_schnell_img_per_hr: 900  # ~4s/img
+    - name: "RTX 3090 Ti"
+      vram_gb: 24
+      price_hr: 0.18
+      flux_dev_img_per_hr: 160
+      flux_schnell_img_per_hr: 800
+
+  # High-performance tier (~$1.50-2.50/hr)
+  high:
+    - name: "A100 80GB"
+      vram_gb: 80
+      price_hr: 1.65
+      flux_dev_img_per_hr: 360    # ~10s/img
+      flux_schnell_img_per_hr: 1800 # ~2s/img
+    - name: "H100 SXM"
+      vram_gb: 80
+      price_hr: 1.65
+      flux_dev_img_per_hr: 480    # ~7.5s/img
+      flux_schnell_img_per_hr: 2400 # ~1.5s/img
+    - name: "RTX 5090"
+      vram_gb: 32
+      price_hr: 0.37
+      flux_dev_img_per_hr: 300
+      flux_schnell_img_per_hr: 1500
+
+# Scaling:
+#   cold_mult: 2               # Prediction multiplier
+#   min_load: 0                # Minimum baseline load
+#   target_util: 0.8           # Target utilization (80%)
+#   cold_workers: 1            # Keep 1 cold worker for fast startup

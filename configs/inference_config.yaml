@@ -1,0 +1,31 @@
+# Inference Configuration
+model:
+  pretrained_model: "stabilityai/stable-diffusion-xl-base-1.0"
+  vae_model: "madebyollin/sdxl-vae-fp16-fix"
+  lora_weights: "./output/lora"
+  lora_scale: 0.8
+
+controlnet:
+  model: "diffusers/controlnet-canny-sdxl-1.0"
+  conditioning_scale: 0.5
+  guidance_start: 0.0
+  guidance_end: 1.0
+
+ip_adapter:
+  model: "h94/IP-Adapter"
+  subfolder: "sdxl_models"
+  weight_name: "ip-adapter-plus-face_sdxl_vit-h.safetensors"
+  scale: 0.6
+
+generation:
+  num_inference_steps: 30
+  guidance_scale: 7.5
+  negative_prompt: "blurry, low quality, distorted, deformed, ugly, bad anatomy, sloppy, inconsistent"
+  width: 1024
+  height: 1024
+  seed: null
+  num_images: 1
+
+output:
+  output_dir: "./data/output"
+  save_format: "png"

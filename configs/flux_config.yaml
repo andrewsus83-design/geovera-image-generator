@@ -1,0 +1,17 @@
+# Flux Model Configuration for vast.ai
+model:
+  variant: "dev"              # "dev" (quality) or "schnell" (speed)
+  model_id: "black-forest-labs/FLUX.1-dev"
+  lora_weights: null          # Path to LoRA (optional)
+
+generation:
+  num_inference_steps: 50     # 50 for dev, 4 for schnell
+  guidance_scale: 3.5         # Flux uses lower guidance (3-4 optimal)
+  width: 768
+  height: 1344                # Default 9:16 vertical
+  seed: null
+
+# vast.ai GPU recommendations:
+# RTX 4090: ~15s/image (dev), ~3s/image (schnell) — $0.40/hr
+# RTX 3090: ~25s/image (dev), ~5s/image (schnell) — $0.25/hr
+# A100 80GB: ~10s/image (dev), ~2s/image (schnell) — $0.80/hr

@@ -1,0 +1,31 @@
+# TikTok Ad Generation Config (9:16 vertical)
+model:
+  pretrained_model: "stabilityai/stable-diffusion-xl-base-1.0"
+  vae_model: "madebyollin/sdxl-vae-fp16-fix"
+  lora_weights: "./output/lora"
+  lora_scale: 0.8
+
+controlnet:
+  model: "diffusers/controlnet-canny-sdxl-1.0"
+  conditioning_scale: 0.5
+  guidance_start: 0.0
+  guidance_end: 1.0
+
+ip_adapter:
+  model: "h94/IP-Adapter"
+  subfolder: "sdxl_models"
+  weight_name: "ip-adapter-plus-face_sdxl_vit-h.safetensors"
+  scale: 0.6
+
+generation:
+  num_inference_steps: 35
+  guidance_scale: 7.5
+  negative_prompt: "low quality, blurry, distorted, deformed, ugly, bad anatomy, extra fingers, weird hands, AI artifacts, oversaturated, cartoon, anime, painting, sketch, low resolution, compression artifacts, watermark, text overlay, sloppy, inconsistent"
+  width: 768
+  height: 1344     # 9:16 vertical ratio
+  seed: null
+  num_images: 1
+
+output:
+  output_dir: "./data/output/tiktok"
+  save_format: "png"
