@@ -1,344 +1,360 @@
-"""Vast.ai Serverless PyWorker for Flux/SDXL image generation.
-
-This worker runs on vast.ai GPU instances and handles incoming
-image generation requests via HTTP endpoints.
+"""Geovera — vast.ai Serverless Worker (Flask HTTP Server)
 
 Endpoints:
-    POST /generate/sync     — Text-to-image generation
-    POST /variation/sync    — Image-to-image variation
-    POST /tiktok-ads/sync   — Full TikTok ad batch generation
-    GET  /health            — Health check
+    GET  /health               — Health check + model status
+    POST /generate/sync        — Text-to-image
+    POST /variation/sync       — Image-to-image variation
+    POST /tiktok-ads/sync      — Full TikTok ad batch
+
+Environment variables:
+    MODEL_TYPE     flux | sdxl          (default: flux)
+    MODEL_VARIANT  dev  | schnell       (default: schnell)
+    LORA_PATH      path to LoRA weights (optional)
+    PORT           HTTP port            (default: 8080)
+    HF_TOKEN       HuggingFace token    (required for flux-dev)
 """
 
 import base64
 import io
 import json
+import logging
 import os
+import sys
 import time
 from pathlib import Path
 
-import torch
+from flask import Flask, jsonify, request
 from PIL import Image
 
-# Determine which model to load from environment
-MODEL_VARIANT = os.environ.get("MODEL_VARIANT", "dev")  # dev or schnell
-MODEL_TYPE = os.environ.get("MODEL_TYPE", "flux")  # flux or sdxl
-LORA_PATH = os.environ.get("LORA_PATH", None)
+# ── Logging ──────────────────────────────────────────────────────
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(message)s",
+    stream=sys.stdout,
+)
+log = logging.getLogger("geovera-worker")
 
-# Global pipeline (loaded once at startup)
-_generator = None
+# ── Config from environment ───────────────────────────────────────
+MODEL_TYPE    = os.environ.get("MODEL_TYPE", "flux")
+MODEL_VARIANT = os.environ.get("MODEL_VARIANT", "schnell")
+LORA_PATH     = os.environ.get("LORA_PATH", None)
+PORT          = int(os.environ.get("PORT", 8080))
+HF_TOKEN      = os.environ.get("HF_TOKEN", None)
 
+# ── Global pipeline (loaded once at startup) ──────────────────────
+_generator   = None
+_model_ready = False
+_load_error  = None
 
-def get_generator():
-    """Lazy-load the generator pipeline."""
-    global _generator
-    if _generator is not None:
-        return _generator
-
-    if MODEL_TYPE == "flux":
-        from src.inference.flux_generate import FluxGenerator
-        _generator = FluxGenerator(model_variant=MODEL_VARIANT, lora_path=LORA_PATH)
-        _generator.load_pipeline(enable_img2img=True)
-    else:
-        from src.inference.img2img import ImageVariationGenerator
-        _generator = ImageVariationGenerator("configs/inference_config.yaml")
-        _generator.load_pipeline()
-
-    return _generator
+app = Flask(__name__)
 
 
-def image_to_base64(img):
-    """Convert PIL Image to base64 string."""
+# ── Model loading ─────────────────────────────────────────────────
+
+def load_model():
+    """Load model pipeline at startup. Called once before serving."""
+    global _generator, _model_ready, _load_error
+
+    try:
+        log.info(f"Loading model: {MODEL_TYPE}-{MODEL_VARIANT} ...")
+
+        if HF_TOKEN:
+            # Set token for gated models (flux-dev requires HF token)
+            os.environ["HF_TOKEN"] = HF_TOKEN
+            os.environ["HUGGING_FACE_HUB_TOKEN"] = HF_TOKEN
+
+        if MODEL_TYPE == "flux":
+            from src.inference.flux_generate import FluxGenerator
+            _generator = FluxGenerator(
+                model_variant=MODEL_VARIANT,
+                lora_path=LORA_PATH,
+            )
+            _generator.load_pipeline(enable_img2img=True)
+        else:
+            from src.inference.img2img import ImageVariationGenerator
+            _generator = ImageVariationGenerator("configs/inference_config.yaml")
+            _generator.load_pipeline()
+
+        _model_ready = True
+        log.info(f"✓ Model ready: {MODEL_TYPE}-{MODEL_VARIANT}")
+
+    except Exception as e:
+        _load_error = str(e)
+        log.error(f"✗ Model load failed: {e}")
+
+
+# ── Helpers ───────────────────────────────────────────────────────
+
+def img_to_b64(img: Image.Image) -> str:
     buf = io.BytesIO()
     img.save(buf, format="PNG")
-    return base64.b64encode(buf.getvalue()).decode("utf-8")
+    return base64.b64encode(buf.getvalue()).decode()
 
 
-def base64_to_image(b64_string):
-    """Convert base64 string to PIL Image."""
-    data = base64.b64decode(b64_string)
-    return Image.open(io.BytesIO(data)).convert("RGB")
+def b64_to_img(b64: str) -> Image.Image:
+    return Image.open(io.BytesIO(base64.b64decode(b64))).convert("RGB")
 
 
-def handle_generate(payload):
-    """Handle text-to-image generation request.
+def require_model():
+    """Return error response if model not ready, else None."""
+    if not _model_ready:
+        msg = _load_error or "Model is still loading, please retry in a moment"
+        return jsonify({"error": msg}), 503
+    return None
 
-    Payload:
-        prompt: str
-        width: int (default 768)
-        height: int (default 1344)
-        num_images: int (default 1)
-        guidance_scale: float (default 3.5)
-        num_inference_steps: int (default None = auto)
-        seed: int (default None)
 
-    Returns:
-        {"images": [base64_string, ...], "time": float}
-    """
-    gen = get_generator()
-    start = time.time()
+# ── Routes ────────────────────────────────────────────────────────
 
-    if MODEL_TYPE == "flux":
-        images = gen.generate(
-            prompt=payload["prompt"],
-            width=payload.get("width", 768),
-            height=payload.get("height", 1344),
-            num_images=payload.get("num_images", 1),
-            guidance_scale=payload.get("guidance_scale", 3.5),
-            num_inference_steps=payload.get("num_inference_steps"),
-            seed=payload.get("seed"),
-        )
-    else:
-        from src.inference.generate import ImageGenerator
-        txt2img = ImageGenerator("configs/inference_config.yaml")
-        txt2img.load_pipeline()
-        images = txt2img.generate(
-            prompt=payload["prompt"],
-            num_images=payload.get("num_images", 1),
-            seed=payload.get("seed"),
-        )
-
-    elapsed = time.time() - start
-    return {
-        "images": [image_to_base64(img) for img in images],
-        "time": round(elapsed, 2),
+@app.route("/health", methods=["GET"])
+def health():
+    return jsonify({
+        "status": "ok" if _model_ready else "loading",
         "model": f"{MODEL_TYPE}-{MODEL_VARIANT}",
-    }
+        "model_ready": _model_ready,
+        "error": _load_error,
+    }), 200
 
 
-def handle_variation(payload):
-    """Handle image-to-image variation request.
+@app.route("/generate/sync", methods=["POST"])
+def generate():
+    """Text-to-image generation.
 
-    Payload:
-        source_image: base64 string
-        prompt: str
-        strength: float (default 0.55)
-        width: int (default 768)
-        height: int (default 1344)
-        num_images: int (default 1)
-        seed: int (default None)
-
-    Returns:
-        {"images": [base64_string, ...], "time": float}
+    Body JSON:
+        prompt         str   required
+        width          int   default 768
+        height         int   default 1344
+        num_images     int   default 1
+        guidance_scale float default 3.5
+        num_steps      int   default None (auto)
+        seed           int   default None
     """
-    gen = get_generator()
-    start = time.time()
+    err = require_model()
+    if err:
+        return err
 
-    source = base64_to_image(payload["source_image"])
+    data = request.get_json(force=True) or {}
+    if not data.get("prompt"):
+        return jsonify({"error": "prompt is required"}), 400
 
-    if MODEL_TYPE == "flux":
-        images = gen.generate_variation(
-            source_image=source,
-            prompt=payload["prompt"],
-            strength=payload.get("strength", 0.55),
-            width=payload.get("width", 768),
-            height=payload.get("height", 1344),
-            num_images=payload.get("num_images", 1),
-            seed=payload.get("seed"),
-        )
-    else:
-        images = gen.generate_variations(
-            source_image=source,
-            prompt=payload["prompt"],
-            strength=payload.get("strength", 0.55),
-            num_variations=payload.get("num_images", 1),
-            seed=payload.get("seed"),
-        )
+    try:
+        t0 = time.time()
 
-    if not isinstance(images, list):
-        images = [images]
-
-    elapsed = time.time() - start
-    return {
-        "images": [image_to_base64(img) for img in images],
-        "time": round(elapsed, 2),
-        "model": f"{MODEL_TYPE}-{MODEL_VARIANT}",
-    }
-
-
-def handle_tiktok_batch(payload):
-    """Handle batch TikTok ad generation.
-
-    Payload:
-        source_image: base64 string (optional, None for text-to-image)
-        subject_description: str
-        theme_ids: list[int] (default all 30)
-        screen_ratio: str (default "9:16")
-        color: str (default "none")
-        num_images_per_theme: int (default 1)
-        strength: float (default 0.55)
-        seed: int (default 42)
-        continuity: bool (default false)
-        continuity_arc: str (default "journey")
-
-    Returns:
-        {"results": [{"theme_id": int, "theme": str, "images": [base64], "time": float}, ...]}
-    """
-    from src.utils.tiktok_prompts import get_prompt, get_continuity_modifier, SCREEN_RATIOS, TIKTOK_AD_THEMES
-
-    gen = get_generator()
-
-    source = None
-    if payload.get("source_image"):
-        source = base64_to_image(payload["source_image"])
-
-    theme_ids = payload.get("theme_ids") or list(range(1, len(TIKTOK_AD_THEMES) + 1))
-    screen_ratio = payload.get("screen_ratio", "9:16")
-    color = payload.get("color", "none")
-    num_per_theme = payload.get("num_images_per_theme", 1)
-    strength = payload.get("strength", 0.55)
-    seed = payload.get("seed", 42)
-    continuity = payload.get("continuity", False)
-    continuity_arc = payload.get("continuity_arc", "journey")
-    subject = payload["subject_description"]
-
-    ratio_data = SCREEN_RATIOS.get(screen_ratio, SCREEN_RATIOS["9:16"])
-    width, height = ratio_data["width"], ratio_data["height"]
-
-    results = []
-    total = len(theme_ids)
-    previous_image = None
-
-    for idx, theme_id in enumerate(theme_ids):
-        theme_data = get_prompt(theme_id, subject, color=color, screen_ratio=screen_ratio)
-        prompt_text = theme_data["prompt"]
-
-        if continuity:
-            prompt_text += get_continuity_modifier(idx, total, arc=continuity_arc)
-
-        start = time.time()
-
-        current_source = previous_image if (continuity and previous_image is not None) else source
-        gen_strength = strength * 0.85 if (continuity and previous_image is not None) else strength
-
-        if current_source and MODEL_TYPE == "flux":
-            images = gen.generate_variation(
-                source_image=current_source,
-                prompt=prompt_text,
-                strength=gen_strength,
-                width=width,
-                height=height,
-                num_images=num_per_theme,
-                seed=seed,
-            )
-        elif current_source:
-            images = gen.generate_variations(
-                source_image=current_source,
-                prompt=prompt_text,
-                strength=gen_strength,
-                num_variations=num_per_theme,
-                seed=seed,
+        if MODEL_TYPE == "flux":
+            images = _generator.generate(
+                prompt=data["prompt"],
+                width=data.get("width", 768),
+                height=data.get("height", 1344),
+                num_images=data.get("num_images", 1),
+                guidance_scale=data.get("guidance_scale", 3.5),
+                num_inference_steps=data.get("num_steps"),
+                seed=data.get("seed"),
             )
         else:
-            images = gen.generate(
-                prompt=prompt_text,
-                width=width,
-                height=height,
-                num_images=num_per_theme,
-                seed=seed,
+            from src.inference.generate import ImageGenerator
+            gen2 = ImageGenerator("configs/inference_config.yaml")
+            gen2.load_pipeline()
+            images = gen2.generate(
+                prompt=data["prompt"],
+                num_images=data.get("num_images", 1),
+                seed=data.get("seed"),
             )
 
         if not isinstance(images, list):
             images = [images]
 
-        if continuity and images:
-            previous_image = images[0]
-
-        elapsed = time.time() - start
-        results.append({
-            "theme_id": theme_id,
-            "theme": theme_data["theme"],
-            "images": [image_to_base64(img) for img in images],
-            "time": round(elapsed, 2),
+        return jsonify({
+            "images": [img_to_b64(img) for img in images],
+            "time":   round(time.time() - t0, 2),
+            "model":  f"{MODEL_TYPE}-{MODEL_VARIANT}",
         })
 
-    return {"results": results, "model": f"{MODEL_TYPE}-{MODEL_VARIANT}"}
+    except Exception as e:
+        log.error(f"/generate error: {e}")
+        return jsonify({"error": str(e)}), 500
 
 
-# ── Vast.ai PyWorker Setup ────────────────────────────────────
+@app.route("/variation/sync", methods=["POST"])
+def variation():
+    """Image-to-image variation.
 
-def create_worker():
-    """Create and configure the vast.ai PyWorker."""
+    Body JSON:
+        source_image   str   base64 PNG/JPG  required
+        prompt         str   required
+        strength       float default 0.55
+        width          int   default 768
+        height         int   default 1344
+        num_images     int   default 1
+        seed           int   default None
+    """
+    err = require_model()
+    if err:
+        return err
+
+    data = request.get_json(force=True) or {}
+    if not data.get("source_image"):
+        return jsonify({"error": "source_image (base64) is required"}), 400
+    if not data.get("prompt"):
+        return jsonify({"error": "prompt is required"}), 400
+
     try:
-        from vastai import Worker, WorkerConfig, HandlerConfig, BenchmarkConfig
-    except ImportError:
-        # Fallback: run as simple Flask server for testing
-        return create_flask_fallback()
+        t0     = time.time()
+        source = b64_to_img(data["source_image"])
 
-    def calc_generate_workload(payload):
-        """Estimate workload units for autoscaling."""
-        steps = payload.get("num_inference_steps", 50)
-        n_images = payload.get("num_images", 1)
-        return steps * n_images
+        if MODEL_TYPE == "flux":
+            images = _generator.generate_variation(
+                source_image=source,
+                prompt=data["prompt"],
+                strength=data.get("strength", 0.55),
+                width=data.get("width", 768),
+                height=data.get("height", 1344),
+                num_images=data.get("num_images", 1),
+                seed=data.get("seed"),
+            )
+        else:
+            images = _generator.generate_variations(
+                source_image=source,
+                prompt=data["prompt"],
+                strength=data.get("strength", 0.55),
+                num_variations=data.get("num_images", 1),
+                seed=data.get("seed"),
+            )
 
-    def calc_variation_workload(payload):
-        steps = payload.get("num_inference_steps", 50)
-        n_images = payload.get("num_images", 1)
-        return steps * n_images
+        if not isinstance(images, list):
+            images = [images]
 
-    def calc_batch_workload(payload):
-        n_themes = len(payload.get("theme_ids", list(range(1, 31))))
-        n_per = payload.get("num_images_per_theme", 1)
-        return n_themes * n_per * 50
+        return jsonify({
+            "images": [img_to_b64(img) for img in images],
+            "time":   round(time.time() - t0, 2),
+            "model":  f"{MODEL_TYPE}-{MODEL_VARIANT}",
+        })
 
-    worker_config = WorkerConfig(
-        model_server_url="http://127.0.0.1",
-        model_server_port=18000,
-        handlers=[
-            HandlerConfig(
-                route="/generate/sync",
-                allow_parallel_requests=False,
-                workload_calculator=calc_generate_workload,
-            ),
-            HandlerConfig(
-                route="/variation/sync",
-                allow_parallel_requests=False,
-                workload_calculator=calc_variation_workload,
-            ),
-            HandlerConfig(
-                route="/tiktok-ads/sync",
-                allow_parallel_requests=False,
-                workload_calculator=calc_batch_workload,
-            ),
-        ],
-    )
-
-    return Worker(worker_config)
+    except Exception as e:
+        log.error(f"/variation error: {e}")
+        return jsonify({"error": str(e)}), 500
 
 
-def create_flask_fallback():
-    """Simple Flask server for local testing without vast.ai SDK."""
-    from flask import Flask, request, jsonify
+@app.route("/tiktok-ads/sync", methods=["POST"])
+def tiktok_batch():
+    """Full TikTok ad batch generation across multiple themes.
 
-    app = Flask(__name__)
+    Body JSON:
+        subject_description    str        required
+        source_image           str|null   base64, optional
+        theme_ids              list[int]  default: all 30
+        screen_ratio           str        default "9:16"
+        color                  str        default "none"
+        num_images_per_theme   int        default 1
+        strength               float      default 0.55
+        seed                   int        default 42
+        continuity             bool       default false
+        continuity_arc         str        default "journey"
+    """
+    err = require_model()
+    if err:
+        return err
 
-    @app.route("/health", methods=["GET"])
-    def health():
-        return jsonify({"status": "ok", "model": f"{MODEL_TYPE}-{MODEL_VARIANT}"})
+    data = request.get_json(force=True) or {}
+    if not data.get("subject_description"):
+        return jsonify({"error": "subject_description is required"}), 400
 
-    @app.route("/generate/sync", methods=["POST"])
-    def generate():
-        return jsonify(handle_generate(request.json))
+    try:
+        from src.utils.tiktok_prompts import (
+            get_prompt, get_continuity_modifier,
+            SCREEN_RATIOS, TIKTOK_AD_THEMES,
+        )
 
-    @app.route("/variation/sync", methods=["POST"])
-    def variation():
-        return jsonify(handle_variation(request.json))
+        source = b64_to_img(data["source_image"]) if data.get("source_image") else None
 
-    @app.route("/tiktok-ads/sync", methods=["POST"])
-    def tiktok_batch():
-        return jsonify(handle_tiktok_batch(request.json))
+        theme_ids     = data.get("theme_ids") or list(range(1, len(TIKTOK_AD_THEMES) + 1))
+        screen_ratio  = data.get("screen_ratio", "9:16")
+        color         = data.get("color", "none")
+        num_per_theme = int(data.get("num_images_per_theme", 1))
+        strength      = float(data.get("strength", 0.55))
+        seed          = data.get("seed", 42)
+        continuity    = bool(data.get("continuity", False))
+        arc           = data.get("continuity_arc", "journey")
+        subject       = data["subject_description"]
 
-    return app
+        ratio   = SCREEN_RATIOS.get(screen_ratio, SCREEN_RATIOS["9:16"])
+        width   = ratio["width"]
+        height  = ratio["height"]
+        total   = len(theme_ids)
 
+        results        = []
+        previous_image = None
+
+        for idx, theme_id in enumerate(theme_ids):
+            theme_data  = get_prompt(theme_id, subject, color=color, screen_ratio=screen_ratio)
+            prompt_text = theme_data["prompt"]
+
+            if continuity:
+                prompt_text += get_continuity_modifier(idx, total, arc=arc)
+
+            current_source = previous_image if (continuity and previous_image) else source
+            gen_strength   = strength * 0.85 if (continuity and previous_image) else strength
+
+            t0 = time.time()
+
+            if current_source and MODEL_TYPE == "flux":
+                images = _generator.generate_variation(
+                    source_image=current_source,
+                    prompt=prompt_text,
+                    strength=gen_strength,
+                    width=width, height=height,
+                    num_images=num_per_theme,
+                    seed=seed,
+                )
+            elif current_source:
+                images = _generator.generate_variations(
+                    source_image=current_source,
+                    prompt=prompt_text,
+                    strength=gen_strength,
+                    num_variations=num_per_theme,
+                    seed=seed,
+                )
+            else:
+                images = _generator.generate(
+                    prompt=prompt_text,
+                    width=width, height=height,
+                    num_images=num_per_theme,
+                    seed=seed,
+                )
+
+            if not isinstance(images, list):
+                images = [images]
+
+            if continuity and images:
+                previous_image = images[0]
+
+            results.append({
+                "theme_id": theme_id,
+                "theme":    theme_data["theme"],
+                "images":   [img_to_b64(img) for img in images],
+                "time":     round(time.time() - t0, 2),
+            })
+
+            log.info(f"  [{idx+1}/{total}] {theme_data['theme']} — {results[-1]['time']}s")
+
+        return jsonify({
+            "results": results,
+            "total":   sum(len(r["images"]) for r in results),
+            "model":   f"{MODEL_TYPE}-{MODEL_VARIANT}",
+        })
+
+    except Exception as e:
+        log.error(f"/tiktok-ads error: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
+# ── Startup ───────────────────────────────────────────────────────
 
 if __name__ == "__main__":
-    worker = create_worker()
+    log.info(f"Geovera Worker starting — {MODEL_TYPE}-{MODEL_VARIANT} on port {PORT}")
 
-    if hasattr(worker, "run"):
-        # Vast.ai PyWorker
-        worker.run()
-    else:
-        # Flask fallback for local testing
-        port = int(os.environ.get("PORT", 8000))
-        print(f"Starting Flask server on port {port}...")
-        worker.run(host="0.0.0.0", port=port)
+    # Load model BEFORE accepting requests
+    load_model()
+
+    if not _model_ready:
+        log.warning("Model failed to load — server will return 503 until model is ready")
+
+    app.run(host="0.0.0.0", port=PORT, threaded=False)
