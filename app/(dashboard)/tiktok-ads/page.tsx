@@ -49,14 +49,8 @@ export default function TikTokAdsPage() {
   const [continuity, setContinuity] = useState(false);
   const [continuityArc, setContinuityArc] = useState<ContinuityArc>("journey");
 
-  // Serverless (Modal.com)
+  // Serverless (Modal.com) — credentials stored in Modal Secrets, not in UI
   const [serverless, setServerless] = useState(true);
-  const [modalTokenId, setModalTokenId] = useState(() =>
-    typeof window !== "undefined" ? localStorage.getItem("modal_token_id") || "" : ""
-  );
-  const [modalTokenSecret, setModalTokenSecret] = useState(() =>
-    typeof window !== "undefined" ? localStorage.getItem("modal_token_secret") || "" : ""
-  );
   const [gpu, setGpu] = useState<GpuType>(() =>
     (typeof window !== "undefined" ? (localStorage.getItem("modal_gpu") as GpuType) : null) ?? "t4"
   );
@@ -119,8 +113,6 @@ export default function TikTokAdsPage() {
     formData.append("continuity", String(continuity));
     formData.append("continuityArc", continuityArc);
     formData.append("serverless", String(serverless));
-    formData.append("modalTokenId", modalTokenId);
-    formData.append("modalTokenSecret", modalTokenSecret);
     formData.append("gpu", gpu);
 
     try {
@@ -553,28 +545,10 @@ export default function TikTokAdsPage() {
 
             {serverless && (
               <>
-                <div className="mb-3">
-                  <label className="form-label">Token ID</label>
-                  <input
-                    className="form-input"
-                    placeholder="ak-xxxxxxxxxxxxxxxx"
-                    value={modalTokenId}
-                    onChange={(e) => setModalTokenId(e.target.value)}
-                  />
-                </div>
-                <div className="mb-3">
-                  <label className="form-label">Token Secret</label>
-                  <input
-                    type="password"
-                    className="form-input"
-                    placeholder="as-xxxxxxxxxxxxxxxx"
-                    value={modalTokenSecret}
-                    onChange={(e) => setModalTokenSecret(e.target.value)}
-                  />
-                  <p className="text-xs text-body mt-1">
-                    Save credentials in <a href="/serverless" className="text-primary underline">GPU Settings</a> to auto-fill
-                  </p>
-                </div>
+                <p className="text-xs text-body mb-3">
+                  Credentials loaded from environment secrets.{" "}
+                  <a href="/serverless" className="text-primary underline">GPU Settings →</a>
+                </p>
 
                 {/* GPU selector */}
                 <div>

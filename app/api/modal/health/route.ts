@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextResponse } from "next/server";
 import { spawn } from "child_process";
 
 // ── Check Modal deployment status ─────────────────────────────────
@@ -19,13 +19,12 @@ function runModalAppList(env: Record<string, string>): Promise<string> {
   });
 }
 
-export async function POST(req: NextRequest) {
+export async function POST() {
   try {
-    const { tokenId, tokenSecret } = await req.json();
-
+    // Modal credentials from Vercel/Supabase environment secrets
     const modalEnv: Record<string, string> = {};
-    if (tokenId)     modalEnv.MODAL_TOKEN_ID     = tokenId;
-    if (tokenSecret) modalEnv.MODAL_TOKEN_SECRET  = tokenSecret;
+    if (process.env.MODAL_TOKEN_ID)     modalEnv.MODAL_TOKEN_ID     = process.env.MODAL_TOKEN_ID;
+    if (process.env.MODAL_TOKEN_SECRET) modalEnv.MODAL_TOKEN_SECRET  = process.env.MODAL_TOKEN_SECRET;
 
     const raw = await runModalAppList(modalEnv);
 

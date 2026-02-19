@@ -1,16 +1,10 @@
 "use client";
 import { useState } from "react";
-import { Cpu, CheckCircle, AlertCircle, RefreshCw, ExternalLink, Zap, TrendingUp, Terminal } from "lucide-react";
+import { Cpu, CheckCircle, AlertCircle, RefreshCw, ExternalLink, Zap, TrendingUp, Terminal, Key } from "lucide-react";
 import { GPU_CATALOG } from "@/lib/constants";
 import type { GpuType } from "@/types";
 
 export default function ServerlessPage() {
-  const [tokenId, setTokenId] = useState(() =>
-    typeof window !== "undefined" ? localStorage.getItem("modal_token_id") || "" : ""
-  );
-  const [tokenSecret, setTokenSecret] = useState(() =>
-    typeof window !== "undefined" ? localStorage.getItem("modal_token_secret") || "" : ""
-  );
   const [gpu, setGpu] = useState<GpuType>(() =>
     (typeof window !== "undefined" ? (localStorage.getItem("modal_gpu") as GpuType) : null) ?? "t4"
   );
@@ -23,35 +17,32 @@ export default function ServerlessPage() {
     setTesting(true);
     setTestResult(null);
     try {
+      // Health check — just calls modal app list (no credentials needed if already deployed)
       const res = await fetch("/api/modal/health", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ tokenId, tokenSecret }),
+        body: JSON.stringify({}),
       });
       const d = await res.json();
       setTestResult({
         ok: res.ok && d.ok,
         msg: d.ok
-          ? `✅ ${d.message ?? "Modal deployment active"}`
-          : `❌ ${d.message ?? d.error ?? "Connection failed"}`,
+          ? `✅ ${d.message ?? "Modal app geovera-flux is deployed"}`
+          : `❌ ${d.message ?? d.error ?? "Modal app not found — run: modal deploy modal_app.py"}`,
       });
     } catch {
-      setTestResult({ ok: false, msg: "❌ Cannot reach Modal. Check token credentials." });
+      setTestResult({ ok: false, msg: "❌ Cannot reach Modal." });
     }
     setTesting(false);
   };
 
   const save = () => {
-    localStorage.setItem("modal_token_id", tokenId);
-    localStorage.setItem("modal_token_secret", tokenSecret);
     localStorage.setItem("modal_gpu", gpu);
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);
   };
 
   const modelKey = model === "flux_dev" ? "flux_dev_s" : model === "flux_schnell" ? "flux_schnell_s" : "sdxl_s";
-
-  // Cost table: 30 images
   const sampleImages = 30;
 
   return (
@@ -61,7 +52,7 @@ export default function ServerlessPage() {
           <Cpu size={22} className="text-primary" />
           GPU & Serverless
         </h1>
-        <p className="text-sm text-body mt-1">Configure Modal.com serverless GPU — pay per second, no idle cost</p>
+        <p className="text-sm text-body mt-1">Modal.com serverless GPU — pay per second, no idle cost</p>
       </div>
 
       {/* Setup guide */}
@@ -70,7 +61,7 @@ export default function ServerlessPage() {
           <Terminal size={16} className="text-primary" />
           <h3 className="font-semibold text-black dark:text-white text-sm">First-time Setup</h3>
         </div>
-        <ol className="space-y-2 text-sm text-body">
+        <ol className="space-y-2.5 text-sm text-body">
           <li className="flex gap-2">
             <span className="font-bold text-primary flex-shrink-0">1.</span>
             <span>
@@ -81,70 +72,96 @@ export default function ServerlessPage() {
           <li className="flex gap-2">
             <span className="font-bold text-primary flex-shrink-0">2.</span>
             <span>
-              Get your tokens from{" "}
-              <a href="https://modal.com/settings/tokens" target="_blank" rel="noreferrer" className="text-primary underline">
-                modal.com/settings/tokens
-              </a>
+              Authenticate:{" "}
+              <code className="bg-gray dark:bg-meta-4 px-1.5 py-0.5 rounded text-xs">modal setup</code>
+              {" "}(opens browser login)
             </span>
           </li>
           <li className="flex gap-2">
             <span className="font-bold text-primary flex-shrink-0">3.</span>
+            <span>
+              <strong className="text-black dark:text-white">Optional</strong> — add HuggingFace token as Modal Secret (only for Flux.1-dev):{" "}
+              <a href="https://modal.com/secrets" target="_blank" rel="noreferrer" className="text-primary underline">
+                modal.com/secrets
+              </a>
+              {" "}→ New Secret → Hugging Face → name it{" "}
+              <code className="bg-gray dark:bg-meta-4 px-1.5 py-0.5 rounded text-xs">geovera-hf-secret</code>
+            </span>
+          </li>
+          <li className="flex gap-2">
+            <span className="font-bold text-primary flex-shrink-0">4.</span>
             <span>
               Deploy the Modal app:{" "}
               <code className="bg-gray dark:bg-meta-4 px-1.5 py-0.5 rounded text-xs">modal deploy modal_app.py</code>
             </span>
           </li>
           <li className="flex gap-2">
-            <span className="font-bold text-primary flex-shrink-0">4.</span>
-            <span>Paste your Token ID and Token Secret below, then click Test Connection</span>
+            <span className="font-bold text-primary flex-shrink-0">5.</span>
+            <span>Click <strong className="text-black dark:text-white">Test Connection</strong> below to verify</span>
           </li>
         </ol>
       </div>
 
-      {/* Token config */}
+      {/* Secrets info card */}
+      <div className="card p-5">
+        <div className="flex items-center gap-2 mb-3">
+          <Key size={16} className="text-primary" />
+          <h3 className="font-semibold text-black dark:text-white text-sm">Modal Secrets (Credentials)</h3>
+        </div>
+        <p className="text-sm text-body mb-3">
+          Credentials disimpan aman di Modal Secrets — tidak perlu input di UI. Modal functions otomatis baca dari environment.
+        </p>
+        <div className="grid gap-3 sm:grid-cols-2">
+          <div className="rounded border border-stroke dark:border-strokedark p-4">
+            <p className="text-sm font-semibold text-black dark:text-white">Modal Auth Token</p>
+            <p className="text-xs text-body mt-1">Diset via <code className="bg-gray dark:bg-meta-4 px-1 rounded">modal setup</code> atau <code className="bg-gray dark:bg-meta-4 px-1 rounded">modal token set</code></p>
+            <a
+              href="https://modal.com/settings/tokens"
+              target="_blank"
+              rel="noreferrer"
+              className="mt-2 flex items-center gap-1 text-xs text-primary hover:underline"
+            >
+              Manage tokens <ExternalLink size={11} />
+            </a>
+          </div>
+          <div className="rounded border border-stroke dark:border-strokedark p-4">
+            <p className="text-sm font-semibold text-black dark:text-white">HuggingFace Token</p>
+            <p className="text-xs text-body mt-1">Secret name: <code className="bg-gray dark:bg-meta-4 px-1 rounded">geovera-hf-secret</code> (optional, untuk Flux Dev)</p>
+            <a
+              href="https://modal.com/secrets"
+              target="_blank"
+              rel="noreferrer"
+              className="mt-2 flex items-center gap-1 text-xs text-primary hover:underline"
+            >
+              Manage secrets <ExternalLink size={11} />
+            </a>
+          </div>
+        </div>
+      </div>
+
+      {/* Connection test */}
       <div className="card">
         <div className="border-b border-stroke dark:border-strokedark px-6 py-4 flex items-center justify-between">
-          <h2 className="font-semibold text-black dark:text-white">Modal.com Credentials</h2>
+          <h2 className="font-semibold text-black dark:text-white">Deployment Status</h2>
           <a
-            href="https://modal.com/settings/tokens"
+            href="https://modal.com/apps"
             target="_blank"
             rel="noreferrer"
             className="flex items-center gap-1 text-xs text-primary hover:underline"
           >
-            Open Modal Dashboard <ExternalLink size={12} />
+            Open Modal Apps <ExternalLink size={12} />
           </a>
         </div>
         <div className="p-6 space-y-4">
-          <div>
-            <label className="form-label">Token ID</label>
-            <input
-              className="form-input"
-              placeholder="ak-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
-              value={tokenId}
-              onChange={(e) => setTokenId(e.target.value)}
-            />
-            <p className="text-xs text-body mt-1">
-              Format: <code className="bg-gray dark:bg-meta-4 px-1 rounded">ak-...</code> — from Modal dashboard → Settings → API Tokens
-            </p>
-          </div>
-          <div>
-            <label className="form-label">Token Secret</label>
-            <input
-              type="password"
-              className="form-input"
-              placeholder="as-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
-              value={tokenSecret}
-              onChange={(e) => setTokenSecret(e.target.value)}
-            />
-            <p className="text-xs text-body mt-1">
-              Format: <code className="bg-gray dark:bg-meta-4 px-1 rounded">as-...</code>
-            </p>
-          </div>
+          <p className="text-sm text-body">
+            App name: <code className="bg-gray dark:bg-meta-4 px-1.5 py-0.5 rounded">geovera-flux</code>
+            {" "}— deployed to Modal cloud, GPU spins up on demand (~10s cold start)
+          </p>
 
           <div className="flex items-center gap-3">
             <button
               onClick={testConnection}
-              disabled={!tokenId || !tokenSecret || testing}
+              disabled={testing}
               className="btn-secondary py-2 px-5 text-sm"
             >
               {testing ? (
@@ -155,10 +172,9 @@ export default function ServerlessPage() {
             </button>
             <button
               onClick={save}
-              disabled={!tokenId}
               className="btn-primary py-2 px-5 text-sm"
             >
-              {saved ? <><CheckCircle size={14} />Saved!</> : "Save Settings"}
+              {saved ? <><CheckCircle size={14} />Saved!</> : "Save GPU Preference"}
             </button>
           </div>
 

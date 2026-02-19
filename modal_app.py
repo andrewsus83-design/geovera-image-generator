@@ -4,23 +4,28 @@ Deploy:
     modal deploy modal_app.py
 
 Run (test locally):
-    modal run modal_app.py::generate --prompt "test" --width 768 --height 1344
+    modal run modal_app.py
 
-Environment variables (set via Modal dashboard or CLI):
-    HF_TOKEN  — HuggingFace token (optional, only needed for Flux.1-dev)
+Secrets (set via Modal dashboard → Secrets):
+    geovera-hf-secret  — contains HF_TOKEN (optional, only needed for Flux.1-dev)
+    Create at: https://modal.com/secrets → New Secret → Hugging Face
 """
 
 import base64
 import io
-import json
 import os
-import sys
 import time
 
 import modal
 
 # ── Modal App ─────────────────────────────────────────────────────
 app = modal.App("geovera-flux")
+
+# ── Secrets ───────────────────────────────────────────────────────
+# HuggingFace token — create via Modal dashboard → Secrets → Hugging Face
+# Name it "geovera-hf-secret" with key HF_TOKEN
+# Only required for Flux.1-dev (Schnell is fully open)
+hf_secret = modal.Secret.from_name("geovera-hf-secret", required=False)
 
 # ── Container image ───────────────────────────────────────────────
 image = (
@@ -114,6 +119,7 @@ def _load_flux_img2img(variant: str = "schnell"):
     gpu="T4",
     image=image,
     volumes={"/model-cache": model_volume},
+    secrets=[hf_secret],
     timeout=300,
     memory=16384,
 )
@@ -164,6 +170,7 @@ def generate(
     gpu="T4",
     image=image,
     volumes={"/model-cache": model_volume},
+    secrets=[hf_secret],
     timeout=300,
     memory=16384,
 )
@@ -213,6 +220,7 @@ def generate_variation(
     gpu="T4",
     image=image,
     volumes={"/model-cache": model_volume},
+    secrets=[hf_secret],
     timeout=600,
     memory=16384,
 )

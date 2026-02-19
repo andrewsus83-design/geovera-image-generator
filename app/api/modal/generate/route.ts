@@ -44,8 +44,6 @@ export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
     const {
-      tokenId,
-      tokenSecret,
       prompt,
       width = 768,
       height = 1344,
@@ -60,10 +58,10 @@ export async function POST(req: NextRequest) {
 
     if (!prompt) return NextResponse.json({ error: "prompt required" }, { status: 400 });
 
-    // Modal credentials via env
+    // Modal credentials from Vercel/Supabase environment secrets
     const modalEnv: Record<string, string> = {};
-    if (tokenId)     modalEnv.MODAL_TOKEN_ID     = tokenId;
-    if (tokenSecret) modalEnv.MODAL_TOKEN_SECRET  = tokenSecret;
+    if (process.env.MODAL_TOKEN_ID)     modalEnv.MODAL_TOKEN_ID     = process.env.MODAL_TOKEN_ID;
+    if (process.env.MODAL_TOKEN_SECRET) modalEnv.MODAL_TOKEN_SECRET  = process.env.MODAL_TOKEN_SECRET;
 
     // GPU map: UI key → Modal GPU string
     const gpuMap: Record<string, string> = {

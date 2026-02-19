@@ -47,8 +47,6 @@ export interface GenerationParams {
 
   // Serverless (Modal.com)
   serverless: boolean;
-  modalTokenId?: string;
-  modalTokenSecret?: string;
   gpu: GpuType;
 
   // Upload
