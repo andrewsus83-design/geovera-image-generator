@@ -1,0 +1,66 @@
+name: Build & Push Docker Image to Docker Hub
+
+# ── Trigger ────────────────────────────────────────────────────
+# Auto build setiap push ke main yang mengubah file serverless/
+# Atau bisa trigger manual lewat GitHub Actions tab
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "serverless/**"
+      - "src/**"
+      - "configs/**"
+  workflow_dispatch:   # tombol "Run workflow" manual di GitHub
+
+# ── Job ────────────────────────────────────────────────────────
+jobs:
+  build-and-push:
+    name: Build & Push geovera-flux
+    runs-on: ubuntu-latest
+
+    steps:
+      # 1. Checkout kode
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # 2. Setup Docker Buildx (multi-platform builder)
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      # 3. Login ke Docker Hub pakai secrets
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      # 4. Build & Push image
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./serverless/Dockerfile
+          push: true
+          tags: |
+            geoverastaging/geovera-flux:latest
+            geoverastaging/geovera-flux:${{ github.sha }}
+          # Cache dari build sebelumnya (lebih cepat)
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          # Platform: Linux AMD64 (untuk vast.ai GPU servers)
+          platforms: linux/amd64
+
+      # 5. Print ringkasan
+      - name: Summary
+        run: |
+          echo "## ✅ Docker Image Berhasil di-push!" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Image:** \`geoverastaging/geovera-flux:latest\`" >> $GITHUB_STEP_SUMMARY
+          echo "**SHA:** \`geoverastaging/geovera-flux:${{ github.sha }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Langkah selanjutnya:" >> $GITHUB_STEP_SUMMARY
+          echo "1. Buka vast.ai Dashboard → Workergroup-17326" >> $GITHUB_STEP_SUMMARY
+          echo "2. Update Docker image ke: \`geoverastaging/geovera-flux:latest\`" >> $GITHUB_STEP_SUMMARY
+          echo "3. Scale up worker → tunggu Active" >> $GITHUB_STEP_SUMMARY
+          echo "4. Copy Endpoint URL dari tab Instances/Endpoints" >> $GITHUB_STEP_SUMMARY

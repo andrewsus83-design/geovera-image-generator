@@ -23,10 +23,10 @@ cd /path/to/image-generator
 docker login
 
 # Build image (jalankan dari ROOT project, bukan dari folder serverless/)
-docker build -f serverless/Dockerfile -t andrewsus83/geovera-flux:latest .
+docker build -f serverless/Dockerfile -t geoverastaging/geovera-flux:latest .
 
 # Push ke Docker Hub
-docker push andrewsus83/geovera-flux:latest
+docker push geoverastaging/geovera-flux:latest
 ```
 
 > **Penting:** Ganti `andrewsus83` dengan username Docker Hub kamu
@@ -41,7 +41,7 @@ docker push andrewsus83/geovera-flux:latest
 
 | Field | Value |
 |-------|-------|
-| **Docker Image** | `andrewsus83/geovera-flux:latest` |
+| **Docker Image** | `geoverastaging/geovera-flux:latest` |
 | **Launch Mode** | `ssh` |
 
 4. Klik **"Environment Variables"** → tambahkan:
