@@ -47,3 +47,10 @@ Thumbs.db
 ui/node_modules/
 ui/.next/
 ui/.env.local
+
+# Root Next.js
+node_modules/
+.next/
+.env.local
+*.tsbuildinfo
+next-env.d.ts
