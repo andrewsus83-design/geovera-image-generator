@@ -31,7 +31,7 @@ app = modal.App("geovera-flux")
 # HuggingFace token — create via Modal dashboard → Secrets → Hugging Face
 # Name it "geovera-hf-secret" with key HF_TOKEN
 # Only required for Flux.1-dev (Schnell is fully open)
-hf_secret = modal.Secret.from_name("geovera-hf-secret", required=False)
+_secrets = []  # Add geovera-hf-secret via Modal dashboard for Flux Dev support
 
 # ── Container image ───────────────────────────────────────────────
 image = (
@@ -123,7 +123,7 @@ def _load_flux_img2img(variant: str = "schnell"):
 # ── Web Endpoint: health check ────────────────────────────────────
 
 @app.function(image=modal.Image.debian_slim(python_version="3.11").pip_install("fastapi[standard]>=0.111.0"))
-@modal.web_endpoint(method="GET", label="health-endpoint")
+@modal.fastapi_endpoint(method="GET", label="health-endpoint")
 def health_endpoint():
     """Health check — no GPU needed."""
     return {"ok": True, "app": "geovera-flux", "status": "deployed"}
@@ -135,11 +135,11 @@ def health_endpoint():
     gpu="T4",
     image=image,
     volumes={"/model-cache": model_volume},
-    secrets=[hf_secret],
+    secrets=_secrets,
     timeout=300,
     memory=16384,
 )
-@modal.web_endpoint(method="POST", label="generate-endpoint")
+@modal.fastapi_endpoint(method="POST", label="generate-endpoint")
 def generate_endpoint(item: dict) -> dict:
     """Text-to-image generation via HTTP POST.
 
@@ -210,11 +210,11 @@ def generate_endpoint(item: dict) -> dict:
     gpu="T4",
     image=image,
     volumes={"/model-cache": model_volume},
-    secrets=[hf_secret],
+    secrets=_secrets,
     timeout=600,
     memory=16384,
 )
-@modal.web_endpoint(method="POST", label="tiktok-batch-endpoint")
+@modal.fastapi_endpoint(method="POST", label="tiktok-batch-endpoint")
 def tiktok_batch_endpoint(item: dict) -> dict:
     """Batch TikTok ad generation via HTTP POST.
 
@@ -323,7 +323,7 @@ def tiktok_batch_endpoint(item: dict) -> dict:
     gpu="T4",
     image=image,
     volumes={"/model-cache": model_volume},
-    secrets=[hf_secret],
+    secrets=_secrets,
     timeout=300,
     memory=16384,
 )
