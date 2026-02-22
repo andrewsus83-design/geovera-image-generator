@@ -1021,24 +1021,52 @@ def tiktok_batch_endpoint(item: dict) -> dict:
 # We need 0.72+ for actual viewpoint changes while preserving product identity
 # via the detailed text prompt.
 MULTI_ANGLE_SHOTS = [
-    # (name, angle_prompt, strength_prop, strength_actor)
-    ("Front View",      "front view, straight-on shot, eye-level camera, subject facing forward, full product visible",                    0.72, 0.72),
-    ("Back View",       "back view, 180-degree rear shot, looking at the back of the subject, rear details visible",                       0.78, 0.75),
-    ("Left Side",       "pure left side profile view, 90 degrees left, subject rotated 90 degrees, left profile facing camera",            0.78, 0.75),
-    ("Right Side",      "pure right side profile view, 90 degrees right, subject rotated 90 degrees, right profile facing camera",         0.78, 0.75),
-    ("3/4 Front-Left",  "three-quarter angle view from front-left, 45-degree rotation, diagonal front-left perspective",                   0.75, 0.72),
-    ("3/4 Front-Right", "three-quarter angle view from front-right, 45-degree rotation, diagonal front-right perspective",                 0.75, 0.72),
-    ("3/4 Back-Left",   "three-quarter angle view from back-left, 135-degree rotation, diagonal rear-left perspective",                   0.78, 0.75),
-    ("3/4 Back-Right",  "three-quarter angle view from back-right, 135-degree rotation, diagonal rear-right perspective",                  0.78, 0.75),
-    ("Overhead",        "directly overhead top-down view, bird's eye view, camera pointing straight down 90 degrees, top surface visible", 0.82, 0.80),
-    ("Bottom View",     "directly underneath view, worm's eye view, camera pointing straight up, bottom surface visible",                  0.82, 0.80),
-    ("Detail Left",     "extreme close-up of left side detail, macro shot, left side texture and hardware",                                0.58, 0.58),
-    ("Detail Right",    "extreme close-up of right side detail, macro shot, right side texture and hardware",                              0.58, 0.58),
-    ("Detail Front",    "extreme close-up front center detail, macro shot, front face logo branding and center detail",                    0.55, 0.55),
-    ("Macro Texture",   "extreme macro close-up, material surface texture, fabric or leather grain detail, ultra close",                   0.50, 0.50),
-    ("Flat-Lay",        "flat-lay composition, subject lying flat on white surface, overhead straight-down camera, clean flat-lay",        0.80, 0.78),
-    ("Glamour Hero",    "dramatic glamour hero shot, 45-degree elevated angle, dramatic three-point studio lighting, hero product shot",   0.72, 0.70),
+    # (name, angle_prompt, strength_prop, strength_actor, actor_framing, actor_bg)
+    #
+    # actor_framing — adds camera distance context for character LoRA diversity (GAP 5):
+    #   "portrait"   → face + shoulders (~50% of shots) — best for facial identity
+    #   "waist_up"   → torso + head (~30% of shots)    — shows outfit + upper body
+    #   "full_body"  → head to toe (~20% of shots)     — posture + outfit + shoes
+    #
+    # actor_bg — background context for character LoRA diversity (GAP 4):
+    #   "studio"     → white seamless studio (~50%)    — identity anchor
+    #   "natural"    → outdoor/natural light (~25%)    — generalization
+    #   "context"    → office/urban environment (~25%) — role relevance
+    #
+    # Products always use white studio regardless of actor_bg (prop studio_ctx overrides).
+
+    # ── Core rotation shots (portrait framing for facial identity) ─────────────────────────────
+    ("Front View",      "front view, straight-on shot, eye-level camera, subject facing forward",               0.72, 0.72, "portrait",  "studio"),
+    ("Back View",       "back view, 180-degree rear shot, looking at the back of the subject",                  0.78, 0.75, "portrait",  "studio"),
+    ("Left Side",       "pure left side profile view, 90 degrees left, left profile facing camera",             0.78, 0.75, "portrait",  "studio"),
+    ("Right Side",      "pure right side profile view, 90 degrees right, right profile facing camera",          0.78, 0.75, "portrait",  "studio"),
+    ("3/4 Front-Left",  "three-quarter angle view from front-left, 45-degree rotation, diagonal perspective",   0.75, 0.72, "portrait",  "natural"),
+    ("3/4 Front-Right", "three-quarter angle view from front-right, 45-degree rotation, diagonal perspective",  0.75, 0.72, "portrait",  "natural"),
+    ("3/4 Back-Left",   "three-quarter angle view from back-left, 135-degree rotation, diagonal perspective",   0.78, 0.75, "waist_up",  "context"),
+    ("3/4 Back-Right",  "three-quarter angle view from back-right, 135-degree rotation, diagonal perspective",  0.78, 0.75, "waist_up",  "context"),
+
+    # ── Extreme angle shots ─────────────────────────────────────────────────────────────────────
+    ("Overhead",        "directly overhead top-down view, bird's eye view, camera pointing straight down",      0.82, 0.80, "full_body", "studio"),
+    ("Bottom View",     "worm's eye view from below, camera pointing straight up, dramatic low angle",          0.82, 0.80, "full_body", "natural"),
+
+    # ── Close-up / detail shots (face-focused — identity lock for LoRA) ────────────────────────
+    ("Face Close-Up",   "extreme close-up portrait, face fills the frame, tight facial detail shot",            0.58, 0.55, "portrait",  "studio"),
+    ("Eye Detail",      "ultra close-up on eyes and upper face, iris and brow texture detail",                  0.55, 0.50, "portrait",  "studio"),
+    ("Face 3/4 Close",  "close-up three-quarter face angle, slight turn, intimate facial portrait",             0.58, 0.55, "portrait",  "natural"),
+
+    # ── Full body / waist shots (outfit + posture learning) ────────────────────────────────────
+    ("Full Body Front", "full body straight-on shot, head to toe, complete figure visible",                     0.80, 0.78, "full_body", "studio"),
+    ("Waist Up",        "waist-up shot, torso and head visible, confident standing pose",                       0.72, 0.70, "waist_up",  "context"),
+    ("Glamour Hero",    "dramatic hero shot, 45-degree elevated angle, dynamic three-point lighting",           0.72, 0.70, "waist_up",  "natural"),
 ]
+
+# Background context strings per actor_bg tag (GAP 4)
+# Used only for actor/character shots — products always use white studio
+ACTOR_BG_CONTEXTS = {
+    "studio":  "white seamless studio background, professional portrait photography, soft studio lighting",
+    "natural": "natural outdoor light, soft bokeh background, golden hour warm ambient light, park or rooftop setting",
+    "context": "modern office interior, clean workspace background, professional business environment, window light",
+}
 
 MULTI_ANGLE_SIZE = 1024  # always 1:1 square for LoRA training
 
@@ -1158,40 +1186,59 @@ def multi_angle_endpoint(item: dict) -> dict:  # internal — called by stream e
             "photorealistic, ultra high resolution, commercial character photography"
         )
 
-    # strength_field index in MULTI_ANGLE_SHOTS tuple: [2]=prop, [3]=actor
+    # Tuple field indices in MULTI_ANGLE_SHOTS
+    # [2]=strength_prop, [3]=strength_actor, [4]=actor_framing, [5]=actor_bg
     strength_field_idx = 2 if subject_type == "prop" else 3
+
+    # Camera framing descriptions (GAP 5 — Distance Variety)
+    FRAMING_DESC = {
+        "portrait":  "close portrait framing, face and shoulders fill the frame",
+        "waist_up":  "waist-up framing, torso and head visible, medium shot",
+        "full_body": "full body framing, head to toe, complete figure in frame",
+    }
 
     print(f"── Step 3/3: Generating 16 angles (caption={'yes' if product_caption else 'no'})...")
     results = []
 
     for angle_idx, angle_entry in enumerate(MULTI_ANGLE_SHOTS):
-        angle_name  = angle_entry[0]
-        angle_desc  = angle_entry[1]
+        angle_name    = angle_entry[0]
+        angle_desc    = angle_entry[1]
         # Per-angle strength:
         #   rotation shots (back/side/overhead) → 0.72-0.82 (model rotates subject)
         #   close-up/detail shots               → 0.50-0.58 (model zooms in, keeps texture)
-        strength    = angle_entry[strength_field_idx]
+        strength      = angle_entry[strength_field_idx]
+
+        # Actor-specific framing + background (GAP 4 + GAP 5)
+        # Only used when subject_type == "actor"; products always use white studio
+        actor_framing = angle_entry[4] if len(angle_entry) > 4 else "portrait"
+        actor_bg_tag  = angle_entry[5] if len(angle_entry) > 5 else "studio"
 
         # Unique reproducible seed per angle (prime step avoids seed collisions)
         angle_seed = base_seed + angle_idx * 37
         generator  = torch.Generator("cuda").manual_seed(angle_seed)
 
         # Prompt structure:
-        #   [product_identity (BLIP-2 + user)] + [angle_desc] + [studio_ctx]
+        #   [product_identity (BLIP-2 + user)] + [angle_desc] + [framing] + [background_ctx]
         #
         # product_identity is placed FIRST → highest CLIP attention weight
         # → model "knows" what it's generating before reading angle instruction
         if subject_type == "prop":
+            # Products always white studio — no framing/bg variations
             prompt = (
                 f"professional product photography of {product_identity}, "
                 f"{angle_desc}, "
                 f"{studio_ctx}"
             )
         else:
+            # Actor: inject per-angle framing (GAP 5) + per-angle background (GAP 4)
+            framing_desc = FRAMING_DESC.get(actor_framing, FRAMING_DESC["portrait"])
+            bg_ctx       = ACTOR_BG_CONTEXTS.get(actor_bg_tag, ACTOR_BG_CONTEXTS["studio"])
             prompt = (
-                f"professional studio portrait of {product_identity}, "
+                f"professional portrait of {product_identity}, "
                 f"{angle_desc}, "
-                f"{studio_ctx}"
+                f"{framing_desc}, "
+                f"{bg_ctx}, "
+                f"photorealistic, ultra high resolution, commercial character photography"
             )
 
         t0 = time.time()

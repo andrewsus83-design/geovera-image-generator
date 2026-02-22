@@ -557,6 +557,41 @@ const ANCHOR_EXPRESSIONS: { id: string; label: string; prompt: string }[] = [
   },
 ];
 
+// ── Angle → caption context map (GAP 4 + GAP 5) ──────────────────────────────
+// Maps angle names (from Modal multi-angle-stream) to their training caption suffix.
+// This replaces the fixed "white studio background" with varied context so the
+// LoRA learns the character across different backgrounds and framings.
+//
+// Format: { setting, framing }
+//   setting → replaces "white studio background" in training captions
+//   framing → added to caption to teach the model shot distance
+//
+// Caption strategy: ohwx, {view}, {expression}, {framing}, {setting}, professional lighting
+const ANGLE_CAPTION_CTX: Record<string, { setting: string; framing: string }> = {
+  "front view":       { framing: "portrait",  setting: "white studio background" },
+  "back view":        { framing: "portrait",  setting: "white studio background" },
+  "left side":        { framing: "portrait",  setting: "white studio background" },
+  "right side":       { framing: "portrait",  setting: "white studio background" },
+  "3/4 front-left":   { framing: "portrait",  setting: "natural outdoor light, soft bokeh background" },
+  "3/4 front-right":  { framing: "portrait",  setting: "natural outdoor light, soft bokeh background" },
+  "3/4 back-left":    { framing: "waist up",  setting: "modern office interior, window light" },
+  "3/4 back-right":   { framing: "waist up",  setting: "modern office interior, window light" },
+  "overhead":         { framing: "full body", setting: "white studio background" },
+  "bottom view":      { framing: "full body", setting: "natural outdoor light" },
+  "face close-up":    { framing: "close-up portrait", setting: "white studio background" },
+  "eye detail":       { framing: "close-up portrait", setting: "white studio background" },
+  "face 3/4 close":   { framing: "close-up portrait", setting: "natural outdoor light" },
+  "full body front":  { framing: "full body", setting: "white studio background" },
+  "waist up":         { framing: "waist up",  setting: "modern office interior, window light" },
+  "glamour hero":     { framing: "waist up",  setting: "natural outdoor light, warm ambient" },
+};
+
+// Get caption context for an angle — falls back to white studio portrait if not found
+function getAngleCaptionCtx(angleName: string): { setting: string; framing: string } {
+  const key = angleName.toLowerCase().trim();
+  return ANGLE_CAPTION_CTX[key] ?? { framing: "portrait", setting: "white studio background" };
+}
+
 // ── Random character generator ─────────────────────────────────────────────────
 // Pools of randomizable attributes for quick custom character generation.
 // All are Indonesian — same ethnicity anchor for LoRA consistency.
@@ -1475,7 +1510,8 @@ export default function CharacterBuilderPage() {
         const safeAngle = a.name.toLowerCase().replace(/[^a-z0-9]+/g, "_");
         const exprDef = ANCHOR_EXPRESSIONS.find((e) => e.id === a.expression);
         const exprDesc = exprDef ? exprDef.prompt : a.expression;
-        return `expr_${a.expression}_${idx}_${safeAngle}.png|ohwx, ${a.name.toLowerCase()} view, ${exprDesc}, white studio background, professional lighting`;
+        const { setting, framing } = getAngleCaptionCtx(a.name);
+        return `expr_${a.expression}_${idx}_${safeAngle}.png|ohwx, ${a.name.toLowerCase()} view, ${framing}, ${exprDesc}, ${setting}, professional lighting`;
       }),
       ...frames.map((_, i) => {
         const idx = String(i + 1).padStart(3, "0");
@@ -1850,7 +1886,8 @@ export default function CharacterBuilderPage() {
         ...s2.map((a) => {
           const exprDef  = ANCHOR_EXPRESSIONS.find((e) => e.id === a.expression);
           const exprDesc = exprDef ? exprDef.prompt : a.expression;
-          return `ohwx, ${a.name.toLowerCase()} view, ${exprDesc}, white studio background, professional lighting`;
+          const { setting, framing } = getAngleCaptionCtx(a.name);
+          return `ohwx, ${a.name.toLowerCase()} view, ${framing}, ${exprDesc}, ${setting}, professional lighting`;
         }),
         ...s3.map(() =>
           `ohwx, 360 degree rotation, white studio background, professional lighting`
@@ -1894,7 +1931,8 @@ export default function CharacterBuilderPage() {
         ...step2Images.map((a) => {
           const exprDef  = ANCHOR_EXPRESSIONS.find((e) => e.id === a.expression);
           const exprDesc = exprDef ? exprDef.prompt : a.expression;
-          return `ohwx, ${a.name.toLowerCase()} view, ${exprDesc}, white studio background, professional lighting`;
+          const { setting, framing } = getAngleCaptionCtx(a.name);
+          return `ohwx, ${a.name.toLowerCase()} view, ${framing}, ${exprDesc}, ${setting}, professional lighting`;
         }),
         ...s3.map(() => `ohwx, 360 degree rotation, white studio background, professional lighting`),
         ...step6Images.map((r) => r.caption),
@@ -1930,7 +1968,8 @@ export default function CharacterBuilderPage() {
       ...step2Images.map((a) => {
         const exprDef = ANCHOR_EXPRESSIONS.find((e) => e.id === a.expression);
         const exprDesc = exprDef ? exprDef.prompt : a.expression;
-        return `ohwx, ${a.name.toLowerCase()} view, ${exprDesc}, white studio background, professional lighting`;
+        const { setting, framing } = getAngleCaptionCtx(a.name);
+        return `ohwx, ${a.name.toLowerCase()} view, ${framing}, ${exprDesc}, ${setting}, professional lighting`;
       }),
       ...step3Frames.map(() =>
         `ohwx, 360 degree rotation, white studio background, professional lighting`
