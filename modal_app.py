@@ -1569,7 +1569,7 @@ training_volume = modal.Volume.from_name("geovera-lora-outputs", create_if_missi
 # ── Web Endpoint: LoRA Training ───────────────────────────────────────────────
 # Trains a Flux LoRA on uploaded images — actor face or product appearance.
 # Uses A100 80GB (enough for Flux-dev training at rank 32).
-# Training time: ~15-25 min for actor (1500 steps), ~8-12 min for prop (800 steps).
+# Training time: ~25-40 min for actor (2500 steps), ~8-12 min for prop (800 steps).
 
 @app.function(
     gpu="A100-80GB",
@@ -1866,7 +1866,7 @@ def train_lora_endpoint(item: dict) -> dict:
 
 # ── LoRA Training on H100 (Modal Function — not a web endpoint) ──────────────
 # H100 80GB — ~35% faster than A100-80GB for transformer training.
-# $0.001097/sec ≈ $3.95/hr · 1500 steps ≈ 18-22 min ≈ ~$1.25/run
+# $0.001097/sec ≈ $3.95/hr · 2500 steps ≈ 28-35 min ≈ ~$1.95/run
 # Note: removed @fastapi_endpoint to free up web endpoint slot for character-agent.
 # Call via train_lora_endpoint with gpu param, or train-all-characters uses .remote()
 
@@ -1888,7 +1888,7 @@ def train_lora_h100_endpoint(item: dict) -> dict:
 
 # ── LoRA Training on H200 (Modal Function — not a web endpoint) ──────────────
 # H200 SXM 141GB — ~45% faster than A100-80GB, larger VRAM → bigger batch.
-# $0.001261/sec ≈ $4.54/hr · 1500 steps ≈ 14-18 min ≈ ~$1.20/run
+# $0.001261/sec ≈ $4.54/hr · 2500 steps ≈ 22-28 min ≈ ~$1.90/run
 # Note: removed @fastapi_endpoint to free up web endpoint slot for character-agent.
 
 @app.function(
@@ -1926,11 +1926,11 @@ _jobs_dict = modal.Dict.from_name("geovera-train-jobs", create_if_missing=True)
 # Browser polls /train-all-status-endpoint?job_id=... to track progress.
 #
 # GPU allocation (user request: 2x H100 + 2x H200):
-#   char 0 → H100  · Actor/Prop LoRA · 1500 steps · ~$1.25
-#   char 1 → H100  · Actor/Prop LoRA · 1500 steps · ~$1.25
-#   char 2 → H200  · Actor/Prop LoRA · 1500 steps · ~$1.20
-#   char 3 → H200  · Actor/Prop LoRA · 1500 steps · ~$1.20
-#   Total parallel cost: ~$4.90  (vs ~$4.90 sequential but 4x faster wall-clock)
+#   char 0 → H100  · Actor/Prop LoRA · 2500 steps · ~$1.95
+#   char 1 → H100  · Actor/Prop LoRA · 2500 steps · ~$1.95
+#   char 2 → H200  · Actor/Prop LoRA · 2500 steps · ~$1.90
+#   char 3 → H200  · Actor/Prop LoRA · 2500 steps · ~$1.90
+#   Total parallel cost: ~$7.70  (vs ~$7.70 sequential but 4x faster wall-clock)
 #
 # Cost reference (Modal pricing 2026):
 #   H100: $0.001097/sec  H200: $0.001261/sec  A100-80GB: $0.000694/sec
@@ -1990,9 +1990,9 @@ def _train_all_start(item: dict) -> dict:
               "type":        string,   — "actor" | "prop"
               "frames":      list,     — base64 PNG images
               "captions":    list,     — captions per image
-              "steps":       int,      — optional (default 1500)
-              "lr":          float,    — optional (default 5e-5)
-              "rank":        int,      — optional (default 32)
+              "steps":       int,      — optional (default actor=2500, prop=800)
+              "lr":          float,    — optional (default actor=2e-5, prop=1e-4)
+              "rank":        int,      — optional (default actor=32, prop=16)
             }
     """
     import concurrent.futures
@@ -2041,16 +2041,20 @@ def _train_all_start(item: dict) -> dict:
         name  = char.get("name", f"char{idx}")
         t0    = time.time()
 
-        print(f"  [{name}] → {gpu} | {len(char.get('frames', []))} images | {char.get('steps', 1500)} steps")
+        lora_type_local = char.get("type", "actor")
+        default_steps   = 2500 if lora_type_local == "actor" else 800
+        default_lr      = 2e-5 if lora_type_local == "actor" else 1e-4
+        default_rank    = 32   if lora_type_local == "actor" else 16
+        print(f"  [{name}] → {gpu} | {len(char.get('frames', []))} images | {char.get('steps', default_steps)} steps")
 
         payload = {
-            "type":         char.get("type",         "actor"),
+            "type":         lora_type_local,
             "frames":       char.get("frames",        []),
             "captions":     char.get("captions",      []),
             "product_name": name,
-            "steps":        char.get("steps",         1500),
-            "lr":           char.get("lr",            5e-5),
-            "rank":         char.get("rank",          32),
+            "steps":        char.get("steps",         default_steps),
+            "lr":           char.get("lr",            default_lr),
+            "rank":         char.get("rank",          default_rank),
         }
 
         try:
@@ -2225,8 +2229,8 @@ def _train_single_start(item: dict) -> dict:
                 "frames":       frames,
                 "captions":     item.get("captions", []),
                 "product_name": product_name,
-                "steps":        int(item.get("steps", 1500 if lora_type == "actor" else 800)),
-                "lr":           float(item.get("lr", 5e-5 if lora_type == "actor" else 1e-4)),
+                "steps":        int(item.get("steps", 2500 if lora_type == "actor" else 800)),
+                "lr":           float(item.get("lr", 2e-5 if lora_type == "actor" else 1e-4)),
                 "rank":         int(item.get("rank", 32 if lora_type == "actor" else 16)),
             }
 

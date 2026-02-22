@@ -1620,10 +1620,10 @@ export default function CharacterBuilderPage() {
       `## Training Recommendations`,
       `| Parameter | Value | Notes |`,
       `|-----------|-------|-------|`,
-      `| Steps | ${1500 + (roleImages.length > 0 ? Math.round(roleImages.length * 5) : 0)} | Disesuaikan dengan jumlah role scenes |`,
-      `| Learning rate | 5e-5 | Konservatif — hindari overfitting |`,
+      `| Steps | ${2500 + (roleImages.length > 0 ? Math.round(roleImages.length * 5) : 0)} | Flux best practice (2500 base + 5×role scenes) |`,
+      `| Learning rate | 2e-5 | Flux best practice — karakter LoRA (bukan style) |`,
       `| LoRA rank | 32 | Balance antara detail dan file size |`,
-      `| Resolution | 512×512 | Minimum; 768×768 lebih baik |`,
+      `| Resolution | 1024×1024 | Full detail — skin, hair, eyes (was 512×512) |`,
       `| Batch size | 1–2 | Sesuaikan dengan VRAM |`,
       `| Base model | SD 1.5 atau SDXL | SD 1.5 untuk kompatibilitas lebih luas |`,
       ``,
@@ -1941,7 +1941,7 @@ export default function CharacterBuilderPage() {
       frames,
       captions,
       productName: characterName,
-      source:      "actor_gen",  // signals Training page to use actor LoRA config (1500 steps, rank 32)
+      source:      "actor_gen",  // signals Training page to use actor LoRA config (2500 steps, rank 32)
       frameCount:  frames.length,
     });
     window.location.href = "/training?from=character-builder";

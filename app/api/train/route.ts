@@ -16,8 +16,8 @@
  *   frames        string[] — base64 PNG images
  *   captions      string[] — one caption per image
  *   productName   string   — used for output filename
- *   steps         number   — training steps (actor: 1500, prop: 800)
- *   lr            string   — learning rate (actor: "5e-5", prop: "1e-4")
+ *   steps         number   — training steps (actor: 2500, prop: 800)
+ *   lr            string   — learning rate (actor: "2e-5", prop: "1e-4")
  *   rank          number   — LoRA rank (actor: 32, prop: 16)
  *
  * Returns immediately:
