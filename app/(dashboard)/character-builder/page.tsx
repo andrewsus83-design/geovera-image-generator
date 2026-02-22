@@ -612,6 +612,8 @@ const ETHNICITY_OPTIONS: EthnicityOption[] = [
   { id: "Asian-Caucasian",     label: "Asian Caucasian",       flag: "🌐" },
   { id: "Russian",             label: "Russian",               flag: "🇷🇺" },
   { id: "Chinese Native",      label: "Chinese Native",        flag: "🇨🇳" },
+  { id: "Japanese",            label: "Japanese",              flag: "🇯🇵" },
+  { id: "Korean",              label: "Korean",                flag: "🇰🇷" },
   { id: "Javanese",            label: "Javanese",              flag: "🏝️" },
   { id: "Random",              label: "Random",                flag: "🎲" },
 ];
@@ -625,6 +627,49 @@ const AGE_RANGE_OPTIONS = [
   { id: "60-70",    label: "60-70", prompt: "senior adult in 60s" },
   { id: "over70",   label: ">70",   prompt: "elderly adult over 70 years old" },
 ];
+
+// ── Outfit style options — male & female pools per style ───────────────────────
+const OUTFIT_STYLE_OPTIONS = [
+  { id: "random",         label: "Random",           icon: "🎲" },
+  { id: "casual",         label: "Casual",           icon: "👕" },
+  { id: "business",       label: "Business",         icon: "👔" },
+  { id: "streetwear",     label: "Streetwear",       icon: "🧢" },
+  { id: "business_formal",label: "Business Formal",  icon: "🕴️" },
+  { id: "chic",           label: "Chic",             icon: "✨" },
+  { id: "luxury",         label: "Luxury",           icon: "💎" },
+  { id: "fresh_grad",     label: "Fresh Grad",       icon: "🎓" },
+];
+
+const OUTFIT_POOLS: Record<string, { male: string[]; female: string[] }> = {
+  casual: {
+    male:   ["casual white crew-neck t-shirt, slim chinos", "casual grey cotton t-shirt, relaxed jeans", "casual beige linen shirt rolled sleeves, chinos", "casual navy henley shirt, dark jeans"],
+    female: ["casual soft white t-shirt, high-waist jeans", "casual pastel blouse, relaxed trousers", "casual white off-shoulder top, denim jeans", "casual cream fitted top, wide-leg pants"],
+  },
+  business: {
+    male:   ["business casual navy slim-fit shirt, tailored trousers", "business casual light blue oxford shirt, grey slacks", "smart casual dark blazer, open-collar white shirt, chinos", "business casual charcoal polo shirt, dress pants"],
+    female: ["business casual blush pink blazer, white blouse, tailored trousers", "business casual navy wrap blouse, slim trousers", "smart casual fitted blazer, silk blouse, tailored pants", "business casual cream button-down, wide-leg trousers"],
+  },
+  streetwear: {
+    male:   ["streetwear oversized black hoodie, baggy cargo pants, white sneakers", "streetwear graphic tee, distressed jeans, chunky sneakers", "streetwear bomber jacket, slim joggers, high-top sneakers", "streetwear monochrome black tracksuit, clean sneakers"],
+    female: ["streetwear oversized hoodie, biker shorts, chunky sneakers", "streetwear graphic cropped tee, cargo pants, platform sneakers", "streetwear puffer jacket, fitted leggings, high-top sneakers", "streetwear cropped sweatshirt, baggy jeans, white sneakers"],
+  },
+  business_formal: {
+    male:   ["formal charcoal three-piece suit, white dress shirt, silk tie", "formal navy pinstripe suit, white shirt, pocket square", "formal black business suit, crisp white shirt, conservative tie", "formal dark grey suit, light blue shirt, polished look"],
+    female: ["formal power blazer suit, crisp white shirt, fitted trousers", "formal navy pencil skirt suit, silk blouse", "formal black structured blazer, tailored wide-leg trousers", "formal burgundy blazer, ivory blouse, fitted skirt"],
+  },
+  chic: {
+    male:   ["chic slim turtleneck, tailored trousers, leather loafers", "chic minimal linen blazer, fitted white shirt, smart trousers", "chic monochrome all-white outfit, premium linen shirt, white chinos", "chic dark monochrome look, sleek black turtleneck, slim trousers"],
+    female: ["chic minimal white midi dress, delicate necklace", "chic silk slip top, tailored wide-leg trousers, minimalist jewelry", "chic black wrap dress, strappy heels, understated elegance", "chic cream blazer dress, simple gold jewelry, clean look"],
+  },
+  luxury: {
+    male:   ["luxury bespoke charcoal wool suit, silk pocket square, cufflinks", "luxury navy cashmere blazer, white luxury shirt, premium trousers", "luxury all-black designer ensemble, structured jacket, fine fabric", "luxury cream linen suit, monogrammed shirt, polished accessories"],
+    female: ["luxury cream designer blazer, silk blouse, statement necklace", "luxury black gown, elegant jewelry, sophisticated evening look", "luxury champagne silk dress, pearl accessories, refined style", "luxury camel coat, silk blouse, designer accessories, polished look"],
+  },
+  fresh_grad: {
+    male:   ["fresh grad navy blazer, white shirt, slim chinos, clean look", "fresh grad grey slim-fit suit, light blue shirt, simple tie", "fresh grad dark blue blazer, crisp white shirt, neat trousers", "fresh grad smart casual blazer, collar shirt, pressed chinos"],
+    female: ["fresh grad pastel blazer, white blouse, tailored trousers, clean look", "fresh grad navy pencil skirt, light blouse, simple heels", "fresh grad ivory blazer, silk top, slim trousers, professional look", "fresh grad powder blue dress, neat cardigan, clean professional style"],
+  },
+};
 
 // ── Random character generator ─────────────────────────────────────────────────
 // Pools of randomizable attributes for quick custom character generation.
@@ -711,6 +756,8 @@ const ETHNICITY_LABEL_MAP: Record<string, string> = {
   "Asian-Caucasian":    "Eurasian mixed Asian-Caucasian features",
   "Russian":            "Russian, light fair complexion, Eastern European features",
   "Chinese Native":     "Chinese, fair to light complexion, East Asian features",
+  "Japanese":           "Japanese, fair to light complexion, refined East Asian features",
+  "Korean":             "Korean, fair smooth complexion, refined East Asian features",
   "Javanese":           "Indonesian Javanese, warm golden-brown complexion, Southeast Asian features",
 };
 
@@ -725,6 +772,8 @@ const ETHNICITY_SKIN_MAP: Record<string, string[]> = {
   "Asian-Caucasian":    ["light warm beige skin, mixed undertone", "fair warm skin, neutral-golden undertone", "warm ivory skin, subtle mixed tone"],
   "Russian":            ["fair cool skin, light pink undertone", "light ivory skin, cool undertone", "fair warm skin, peachy rosy undertone"],
   "Chinese Native":     ["fair porcelain skin, neutral undertone", "light warm beige skin, soft golden tint", "fair ivory skin, cool light undertone"],
+  "Japanese":           ["fair porcelain skin, neutral-cool undertone", "light ivory skin, soft yellow-neutral tint", "fair smooth skin, translucent cool undertone"],
+  "Korean":             ["fair glass skin, cool neutral undertone", "light porcelain skin, pink-cool undertone", "fair ivory skin, luminous neutral tone"],
   "Javanese":           ["warm medium-tan skin, golden-brown undertone", "warm olive skin, earthy undertone", "warm light brown complexion"],
 };
 
@@ -739,13 +788,16 @@ const ETHNICITY_EYE_MAP: Record<string, string[]> = {
   "Asian-Caucasian":    ["mixed almond-shaped eyes, partial double eyelid, warm brown tone", "light brown almond eyes, natural soft fold, bright gaze", "warm hazel eyes, soft almond shape, expressive look"],
   "Russian":            ["deep blue eyes, defined double eyelid, intense gaze", "light grey-green eyes, natural eyelid, cool expressive look", "pale blue eyes, double eyelid, sharp clear gaze"],
   "Chinese Native":     ["narrow almond-shaped dark eyes, single eyelid, calm gaze", "almond eyes, subtle double eyelid, bright expression", "wide monolid brown-black eyes, smooth epicanthal fold"],
+  "Japanese":           ["almond-shaped dark brown eyes, natural single eyelid, soft serene gaze", "refined almond eyes, subtle double eyelid, calm focused expression", "narrow dark eyes, single eyelid, gentle steady look"],
+  "Korean":             ["bright almond-shaped dark eyes, natural double eyelid, clear expressive gaze", "wide almond eyes, defined double eyelid, lively bright expression", "dark almond eyes, soft single eyelid, gentle elegant look"],
   "Javanese":           ["dark almond-shaped eyes, natural single eyelid, soft gaze", "wide dark eyes, single eyelid, warm gentle expression", "deep-set dark brown eyes, sleepy lidded look"],
 };
 
 interface GenerateCharacterParams {
-  gender?:     "male" | "female";
-  ageId?:      string;  // AGE_RANGE_OPTIONS.id
-  ethnicityId?: string; // ETHNICITY_OPTIONS.id
+  gender?:       "male" | "female";
+  ageId?:        string;  // AGE_RANGE_OPTIONS.id
+  ethnicityId?:  string;  // ETHNICITY_OPTIONS.id
+  outfitStyleId?: string; // OUTFIT_STYLE_OPTIONS.id
 }
 
 function generateRandomCharacter(params?: GenerateCharacterParams): Character {
@@ -754,7 +806,7 @@ function generateRandomCharacter(params?: GenerateCharacterParams): Character {
   // Resolve ethnicity
   let ethnicity: string;
   if (!params?.ethnicityId || params.ethnicityId === "Random") {
-    ethnicity = pick(["Indonesian Native", "Tionghoa", "Indo-Caucasian", "Caucasian", "Asian", "European", "Russian", "Chinese Native", "Javanese", "African", "Asian-Caucasian"]);
+    ethnicity = pick(["Indonesian Native", "Tionghoa", "Indo-Caucasian", "Caucasian", "Asian", "European", "Russian", "Chinese Native", "Japanese", "Korean", "Javanese", "African", "Asian-Caucasian"]);
   } else {
     ethnicity = params.ethnicityId;
   }
@@ -789,16 +841,26 @@ function generateRandomCharacter(params?: GenerateCharacterParams): Character {
     namePool = gender === "female"
       ? ["Anastasia", "Natasha", "Oksana", "Tatiana", "Katerina", "Alina", "Sofia", "Daria", "Polina", "Masha"]
       : ["Alexei", "Dmitri", "Ivan", "Nikolai", "Sergei", "Vladimir", "Mikhail", "Andrei", "Pavel", "Artem"];
-  } else if (ethnicity === "Asian") {
+  } else if (ethnicity === "Asian" || ethnicity === "Japanese") {
     namePool = gender === "female"
-      ? ["Yuki", "Sakura", "Hana", "Mei", "Rin", "Sora", "Aoi", "Nana", "Yuna", "Mika"]
-      : ["Kenji", "Hiroshi", "Takeshi", "Ryu", "Kenta", "Yuki", "Sho", "Daiki", "Kazuki", "Naoki"];
+      ? ["Yuki", "Sakura", "Hana", "Mei", "Rin", "Sora", "Aoi", "Nana", "Yuna", "Mika", "Akemi", "Haruka"]
+      : ["Kenji", "Hiroshi", "Takeshi", "Ryu", "Kenta", "Sho", "Daiki", "Kazuki", "Naoki", "Ren", "Sota", "Yuto"];
+  } else if (ethnicity === "Korean") {
+    namePool = gender === "female"
+      ? ["Jiyeon", "Minji", "Sooyeon", "Hyeji", "Chaeyoung", "Yuna", "Sora", "Dahyun", "Jisoo", "Seolhyun"]
+      : ["Minjun", "Seojun", "Jihoon", "Taehyun", "Jungwoo", "Hyunwoo", "Jaehyun", "Siwon", "Donghyun", "Yoongi"];
   } else {
     namePool = gender === "female" ? RANDOM_POOLS.femaleName : RANDOM_POOLS.maleName;
   }
 
-  const name    = pick(namePool);
-  const outfit  = pick(gender === "female" ? RANDOM_POOLS.femaleOutfit : RANDOM_POOLS.maleOutfit);
+  const name = pick(namePool);
+
+  // Resolve outfit by style
+  const styleId    = (!params?.outfitStyleId || params.outfitStyleId === "random") ? null : params.outfitStyleId;
+  const stylePool  = styleId && OUTFIT_POOLS[styleId];
+  const outfit     = stylePool
+    ? pick(gender === "female" ? stylePool.female : stylePool.male)
+    : pick(gender === "female" ? RANDOM_POOLS.femaleOutfit : RANDOM_POOLS.maleOutfit);
 
   // Ethnicity label for prompt
   const ethnicityLabel = ETHNICITY_LABEL_MAP[ethnicity] ?? `${ethnicity} features`;
@@ -812,9 +874,13 @@ function generateRandomCharacter(params?: GenerateCharacterParams): Character {
   const noseOverride: string | null =
     (ethnicity === "Tionghoa" || ethnicity === "Chinese Native" || ethnicity === "Asian")
       ? pick(["small refined nose, straight slim bridge", "small button nose, straight slim bridge"])
-      : (ethnicity === "Indo-Caucasian" || ethnicity === "Asian-Caucasian")
-        ? pick(["straight refined nose, medium bridge, neat tip", "slightly elevated nose bridge, refined straight nose"])
-        : null;
+      : (ethnicity === "Japanese")
+        ? pick(["small refined nose, straight slim bridge", "delicate small nose, straight slim bridge", "refined pointed nose, slim bridge"])
+        : (ethnicity === "Korean")
+          ? pick(["small refined nose, straight slim bridge", "delicate button nose, subtle slim bridge", "refined small nose, slightly upturned tip"])
+          : (ethnicity === "Indo-Caucasian" || ethnicity === "Asian-Caucasian")
+            ? pick(["straight refined nose, medium bridge, neat tip", "slightly elevated nose bridge, refined straight nose"])
+            : null;
 
   const extra = [
     ethnicityLabel,
@@ -966,10 +1032,11 @@ export default function CharacterBuilderPage() {
   const [customName,    setCustomName]    = useState(""); // editable name override
   const [useCustom,     setUseCustom]     = useState(false);
 
-  // Attribute selector — gender / age / ethnicity — used when generating random character
-  const [selGender,    setSelGender]    = useState<"female" | "male">("female");
-  const [selAgeId,     setSelAgeId]     = useState<string>("20-30");
-  const [selEthnicity, setSelEthnicity] = useState<string>("Indonesian Native");
+  // Attribute selector — gender / age / ethnicity / outfit style — used when generating random character
+  const [selGender,      setSelGender]      = useState<"female" | "male">("female");
+  const [selAgeId,       setSelAgeId]       = useState<string>("20-30");
+  const [selEthnicity,   setSelEthnicity]   = useState<string>("Indonesian Native");
+  const [selOutfitStyle, setSelOutfitStyle] = useState<string>("random");
 
   // Results from each step
   const [step1Image,   setStep1Image]   = useState<string | null>(null); // base64 data URL
@@ -2241,14 +2308,36 @@ export default function CharacterBuilderPage() {
           </div>
         </div>
 
+        {/* ── Outfit Style ── */}
+        <div>
+          <label className="form-label text-[11px] mb-1.5 block">Outfit Style</label>
+          <div className="flex flex-wrap gap-1.5">
+            {OUTFIT_STYLE_OPTIONS.map((s) => (
+              <button
+                key={s.id}
+                onClick={() => setSelOutfitStyle(s.id)}
+                className={`rounded-full border px-3 py-1 text-xs font-medium transition-all flex items-center gap-1
+                  ${selOutfitStyle === s.id
+                    ? "border-primary bg-primary text-white"
+                    : "border-stroke dark:border-strokedark text-body hover:border-primary/50 hover:text-primary"
+                  }`}
+              >
+                <span>{s.icon}</span>
+                <span>{s.label}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+
         {/* ── Generate button ── */}
         <div className="flex items-center gap-3">
           <button
             onClick={() => {
               const r = generateRandomCharacter({
-                gender:      selGender,
-                ageId:       selAgeId,
-                ethnicityId: selEthnicity,
+                gender:        selGender,
+                ageId:         selAgeId,
+                ethnicityId:   selEthnicity,
+                outfitStyleId: selOutfitStyle,
               });
               setCustomChar(r);
               setCustomName(r.name);
