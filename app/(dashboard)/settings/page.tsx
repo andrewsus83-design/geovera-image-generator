@@ -11,6 +11,8 @@ export default function SettingsPage() {
     supabaseKey: "",
     vastEndpoint: "",
     vastKey: "",
+    klingAccessKey: "",
+    klingSecretKey: "",
     outputDir: "data/output/tiktok",
     defaultGpu: "any",
     defaultModel: "flux_dev",
@@ -72,6 +74,15 @@ export default function SettingsPage() {
           <InputField label="Supabase Anon Key" field="supabaseKey" type="password" placeholder="eyJ..." />
           <InputField label="vast.ai Endpoint URL" field="vastEndpoint" placeholder="https://xxxx.vast.ai:PORT" />
           <InputField label="vast.ai API Key" field="vastKey" type="password" placeholder="••••••••" />
+          <div className="border-t border-stroke dark:border-strokedark pt-4">
+            <p className="text-xs font-semibold text-black dark:text-white mb-3 flex items-center gap-2">
+              🎬 Kling AI (Image to Video)
+            </p>
+            <div className="space-y-3">
+              <InputField label="Kling Access Key" field="klingAccessKey" type="password" placeholder="AKpakt..." />
+              <InputField label="Kling Secret Key" field="klingSecretKey" type="password" placeholder="y44Gk..." />
+            </div>
+          </div>
         </div>
       </div>
 
@@ -125,7 +136,9 @@ export default function SettingsPage() {
 SUPABASE_URL=https://xxxx.supabase.co
 SUPABASE_ANON_KEY=eyJ...
 VAST_ENDPOINT_URL=https://xxxx.vast.ai:PORT
-VAST_API_KEY=your_vast_key`}
+VAST_API_KEY=your_vast_key
+KLING_ACCESS_KEY=AKpakt...
+KLING_SECRET_KEY=y44Gk...`}
         </pre>
       </div>
     </div>

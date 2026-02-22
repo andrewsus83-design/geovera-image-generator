@@ -36,7 +36,7 @@ export default function TikTokAdsPage() {
   const [propScale, setPropScale] = useState(0.35);
 
   // Generation
-  const [selectedThemes, setSelectedThemes] = useState<number[] | "all">("all");
+  const [selectedThemes, setSelectedThemes] = useState<number>(1);
   const [screen, setScreen] = useState<ScreenRatio>("9:16");
   const [numImages, setNumImages] = useState(1);
   const [color, setColor] = useState("none");
@@ -70,8 +70,7 @@ export default function TikTokAdsPage() {
 
   const hasActor = mode === "actor" || mode === "actor+prop";
   const hasProp = mode === "prop" || mode === "actor+prop";
-  const themeCount = selectedThemes === "all" ? 30 : selectedThemes.length;
-  const totalImages = themeCount * numImages;
+  const totalImages = numImages;
 
   const gpuInfo = GPU_CATALOG[gpu];
   const modelKey = useFlux ? (fluxVariant === "dev" ? "flux_dev_s" : "flux_schnell_s") : "sdxl_s";
@@ -102,7 +101,7 @@ export default function TikTokAdsPage() {
     formData.append("propDesc", propDesc);
     formData.append("propPosition", propPosition);
     formData.append("propScale", String(propScale));
-    formData.append("themes", selectedThemes === "all" ? "all" : selectedThemes.join(","));
+    formData.append("themes", String(selectedThemes));
     formData.append("screen", screen);
     formData.append("numImages", String(numImages));
     formData.append("color", color);
@@ -612,7 +611,7 @@ export default function TikTokAdsPage() {
                 { label: "Mode", value: mode.toUpperCase() },
                 { label: "Model", value: useFlux ? `Flux.1 ${fluxVariant}` : "SDXL" },
                 { label: "Screen", value: `${screen} (${SCREEN_RATIOS[screen].width}×${SCREEN_RATIOS[screen].height})` },
-                { label: "Themes", value: `${themeCount} themes × ${numImages} = ${totalImages} images` },
+                { label: "Images", value: `${totalImages} image${totalImages > 1 ? "s" : ""} from theme #${selectedThemes}` },
                 { label: "Strength", value: strength.toFixed(2) },
                 { label: "Continuity", value: continuity ? `✓ ${CONTINUITY_ARCS[continuityArc].label}` : "Off" },
                 { label: "Backend", value: serverless ? "vast.ai Serverless" : "Local GPU" },

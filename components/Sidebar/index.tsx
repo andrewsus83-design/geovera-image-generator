@@ -12,6 +12,11 @@ import {
   BookOpen,
   ChevronDown,
   Sparkles,
+  Layers,
+  Clapperboard,
+  User,
+  Users,
+  Wand2,
 } from "lucide-react";
 
 interface NavItem {
@@ -28,9 +33,19 @@ const navItems: NavItem[] = [
     icon: <LayoutDashboard size={18} />,
   },
   {
-    label: "TikTok Ad Generator",
+    label: "Image Generator",
     href: "/tiktok-ads",
-    icon: <Film size={18} />,
+    icon: <Wand2 size={18} />,
+  },
+  {
+    label: "Multi-Angle Synthetic",
+    href: "/multi-angle",
+    icon: <Layers size={18} />,
+  },
+  {
+    label: "Image to Video",
+    href: "/video",
+    icon: <Clapperboard size={18} />,
   },
   {
     label: "Image Gallery",
@@ -43,9 +58,19 @@ const navItems: NavItem[] = [
     icon: <Cpu size={18} />,
   },
   {
+    label: "Character Builder",
+    href: "/character-builder",
+    icon: <User size={18} />,
+  },
+  {
     label: "Training / LoRA",
     href: "/training",
     icon: <Zap size={18} />,
+  },
+  {
+    label: "Characters",
+    href: "/characters",
+    icon: <Users size={18} />,
   },
 ];
 
@@ -103,7 +128,7 @@ export default function Sidebar({ open, setOpen }: { open: boolean; setOpen: (v:
                 >
                   {item.icon}
                   {item.label}
-                  {item.label === "TikTok Ad Generator" && (
+                  {(item.label === "Image Generator" || item.label === "Multi-Angle Synthetic" || item.label === "Image to Video") && (
                     <span className="ml-auto rounded-full bg-primary/20 px-1.5 py-0.5 text-xs text-primary">
                       PRO
                     </span>
@@ -179,7 +204,7 @@ export default function Sidebar({ open, setOpen }: { open: boolean; setOpen: (v:
               G
             </div>
             <div>
-              <p className="text-xs font-medium text-white">vast.ai Serverless</p>
+              <p className="text-xs font-medium text-white">Modal A100-80GB</p>
               <p className="text-xs text-bodydark">Connected</p>
             </div>
             <div className="ml-auto h-2 w-2 rounded-full bg-success animate-pulse" />

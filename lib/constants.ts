@@ -36,6 +36,18 @@ export const TIKTOK_AD_THEMES: TikTokTheme[] = [
   { id: 30, name: "Grunge Rebel Aesthetic", description: "Raw grunge with distressed textures", mood: "rebellious, raw", lighting: "harsh dramatic", color_palette: "dark, distressed muted" },
 ];
 
+// ── Theme Categories (for pool filter UI) ───────────────────────
+export const THEME_CATEGORIES: { label: string; ids: number[] }[] = [
+  { label: "✨ Luxury",     ids: [1, 20, 4, 5, 15] },
+  { label: "🌆 Urban",      ids: [7, 2, 28, 27, 12] },
+  { label: "🌿 Outdoor",    ids: [3, 17, 22, 26, 24] },
+  { label: "🎭 Cinematic",  ids: [6, 11, 25, 21, 15] },
+  { label: "🔮 Futuristic", ids: [14, 2, 23, 29] },
+  { label: "🎉 Lifestyle",  ids: [8, 18, 10, 19, 13] },
+  { label: "🌈 Colorful",   ids: [16, 13, 26, 24, 19] },
+  { label: "💼 Business",   ids: [9, 4, 5, 20] },
+];
+
 // ── Screen Ratios ───────────────────────────────────────────────
 export const SCREEN_RATIOS: Record<string, ScreenRatioInfo> = {
   "9:16": { width: 768, height: 1344, label: "Vertical — TikTok / Reels / Stories" },
@@ -145,4 +157,20 @@ export const PROP_POSITIONS = [
   { value: "right", label: "Right" },
   { value: "bottom-left", label: "Bottom Left" },
   { value: "bottom-right", label: "Bottom Right" },
+];
+
+// ── Camera Shots ────────────────────────────────────────────────
+export const CAMERA_SHOTS = [
+  { value: "none",        label: "Normal (Auto)",    prompt: "" },
+  { value: "mix",         label: "Mix (Auto-vary)",  prompt: "__mix__" },
+  { value: "extreme_close", label: "Extreme Close-up", prompt: "extreme close-up shot, macro detail" },
+  { value: "close",       label: "Close-up",         prompt: "close-up shot, face and product detail" },
+  { value: "medium_close",label: "Medium Close",     prompt: "medium close-up shot, waist up" },
+  { value: "medium",      label: "Medium Shot",      prompt: "medium shot, half body" },
+  { value: "medium_wide", label: "Medium Wide",      prompt: "medium wide shot, full body" },
+  { value: "wide",        label: "Wide Shot",        prompt: "wide shot, full environment visible" },
+  { value: "extreme_wide",label: "Extreme Wide",     prompt: "extreme wide shot, aerial or panoramic view" },
+  { value: "overhead",    label: "Overhead / Top",   prompt: "overhead top-down shot, bird's eye view" },
+  { value: "low_angle",   label: "Low Angle",        prompt: "low angle shot, looking up, dramatic perspective" },
+  { value: "high_angle",  label: "High Angle",       prompt: "high angle shot, looking down" },
 ];
