@@ -592,6 +592,40 @@ function getAngleCaptionCtx(angleName: string): { setting: string; framing: stri
   return ANGLE_CAPTION_CTX[key] ?? { framing: "portrait", setting: "white studio background" };
 }
 
+// ── Character attribute selector options ───────────────────────────────────────
+// User picks gender + age range + ethnicity → generator randomizes the rest.
+
+interface EthnicityOption {
+  id:    string;   // key used in generation logic
+  label: string;   // display label
+  flag:  string;   // emoji flag / icon
+}
+
+const ETHNICITY_OPTIONS: EthnicityOption[] = [
+  { id: "Caucasian",           label: "Caucasian",             flag: "🇺🇸" },
+  { id: "African",             label: "African",               flag: "🌍" },
+  { id: "Asian",               label: "Asian",                 flag: "🌏" },
+  { id: "European",            label: "European",              flag: "🇪🇺" },
+  { id: "Indonesian Native",   label: "Indonesian Native",     flag: "🇮🇩" },
+  { id: "Tionghoa",            label: "Indonesian Chinese",    flag: "🈵" },
+  { id: "Indo-Caucasian",      label: "Indonesian Caucasian",  flag: "🇮🇩" },
+  { id: "Asian-Caucasian",     label: "Asian Caucasian",       flag: "🌐" },
+  { id: "Russian",             label: "Russian",               flag: "🇷🇺" },
+  { id: "Chinese Native",      label: "Chinese Native",        flag: "🇨🇳" },
+  { id: "Javanese",            label: "Javanese",              flag: "🏝️" },
+  { id: "Random",              label: "Random",                flag: "🎲" },
+];
+
+const AGE_RANGE_OPTIONS = [
+  { id: "under20",  label: "<20",   prompt: "teenager, under 20 years old" },
+  { id: "20-30",    label: "20-30", prompt: "young adult in 20s" },
+  { id: "30-40",    label: "30-40", prompt: "adult in 30s" },
+  { id: "40-50",    label: "40-50", prompt: "adult in 40s" },
+  { id: "50-60",    label: "50-60", prompt: "mature adult in 50s" },
+  { id: "60-70",    label: "60-70", prompt: "senior adult in 60s" },
+  { id: "over70",   label: ">70",   prompt: "elderly adult over 70 years old" },
+];
+
 // ── Random character generator ─────────────────────────────────────────────────
 // Pools of randomizable attributes for quick custom character generation.
 // All are Indonesian — same ethnicity anchor for LoRA consistency.
@@ -665,63 +699,138 @@ function pick<T>(arr: T[]): T {
   return arr[Math.floor(Math.random() * arr.length)];
 }
 
-function generateRandomCharacter(): Character {
-  const gender  = Math.random() > 0.5 ? "female" : "male";
-  const ethnicity = pick(RANDOM_POOLS.ethnicity);
+// Ethnicity → LoRA prompt descriptor mapping
+const ETHNICITY_LABEL_MAP: Record<string, string> = {
+  "Caucasian":          "Caucasian, fair complexion, Western European features",
+  "African":            "African, dark rich complexion, strong African features",
+  "Asian":              "East Asian, clean fair skin, Asian features",
+  "European":           "European, fair complexion, refined European features",
+  "Indonesian Native":  "Indonesian, warm tan complexion, Southeast Asian features",
+  "Tionghoa":           "Indonesian Chinese Tionghoa",
+  "Indo-Caucasian":     "Indonesian Eurasian Indo-Caucasian mixed features",
+  "Asian-Caucasian":    "Eurasian mixed Asian-Caucasian features",
+  "Russian":            "Russian, light fair complexion, Eastern European features",
+  "Chinese Native":     "Chinese, fair to light complexion, East Asian features",
+  "Javanese":           "Indonesian Javanese, warm golden-brown complexion, Southeast Asian features",
+};
 
-  // Ethnicity-specific name pools — Chinese and Caucasian-mix names feel authentic
+const ETHNICITY_SKIN_MAP: Record<string, string[]> = {
+  "Caucasian":          ["fair rosy skin, pinkish undertone", "light ivory skin, neutral undertone", "fair warm skin, peachy undertone"],
+  "African":            ["rich dark brown skin, warm undertone", "deep ebony complexion, blue-black undertone", "warm dark caramel skin, golden undertone"],
+  "Asian":              ["fair porcelain skin, cool pink undertone", "light warm beige skin, neutral undertone", "fair ivory skin, soft golden undertone"],
+  "European":           ["fair warm skin, golden undertone", "light ivory skin, cool neutral undertone", "fair rosy skin, peachy undertone"],
+  "Indonesian Native":  ["warm medium olive-tan skin", "warm golden-brown complexion", "warm light caramel skin"],
+  "Tionghoa":           ["fair porcelain skin, cool pink undertone", "fair warm ivory skin, light golden undertone", "light beige skin, neutral undertone"],
+  "Indo-Caucasian":     ["warm honey skin, mixed golden-fair undertone", "light warm beige skin, peachy-golden undertone", "fair warm ivory skin, soft golden undertone"],
+  "Asian-Caucasian":    ["light warm beige skin, mixed undertone", "fair warm skin, neutral-golden undertone", "warm ivory skin, subtle mixed tone"],
+  "Russian":            ["fair cool skin, light pink undertone", "light ivory skin, cool undertone", "fair warm skin, peachy rosy undertone"],
+  "Chinese Native":     ["fair porcelain skin, neutral undertone", "light warm beige skin, soft golden tint", "fair ivory skin, cool light undertone"],
+  "Javanese":           ["warm medium-tan skin, golden-brown undertone", "warm olive skin, earthy undertone", "warm light brown complexion"],
+};
+
+const ETHNICITY_EYE_MAP: Record<string, string[]> = {
+  "Caucasian":          ["bright blue eyes, natural double eyelid, expressive gaze", "deep green eyes, defined eyelid, clear gaze", "warm hazel eyes, double eyelid, open expressive look"],
+  "African":            ["deep dark brown eyes, natural double eyelid, strong expressive gaze", "warm dark eyes, prominent lids, confident look", "rich brown eyes, full lids, intense gaze"],
+  "Asian":              ["narrow almond-shaped dark eyes, single eyelid, calm steady gaze", "almond-shaped eyes, subtle double eyelid, bright gaze", "wide monolid dark brown eyes, smooth epicanthal fold"],
+  "European":           ["blue-grey eyes, natural double eyelid, soft expressive gaze", "light brown eyes, defined eyelid, warm relaxed look", "green eyes, natural double eyelid, bright clear gaze"],
+  "Indonesian Native":  ["large bright almond eyes, natural single eyelid, long dark lashes", "deep-set dark brown eyes, single eyelid", "expressive dark double-lidded eyes, sharp intelligent gaze"],
+  "Tionghoa":           ["narrow almond-shaped dark eyes, prominent single eyelid, smooth epicanthal fold", "wide monolid dark brown eyes, calm steady expression", "almond-shaped eyes, subtle double eyelid, bright gaze"],
+  "Indo-Caucasian":     ["deep-set light brown eyes, natural double eyelid, expressive gaze", "hazel almond-shaped eyes, mixed light-brown tone, bright expression", "warm brown eyes, natural double eyelid, relaxed gaze"],
+  "Asian-Caucasian":    ["mixed almond-shaped eyes, partial double eyelid, warm brown tone", "light brown almond eyes, natural soft fold, bright gaze", "warm hazel eyes, soft almond shape, expressive look"],
+  "Russian":            ["deep blue eyes, defined double eyelid, intense gaze", "light grey-green eyes, natural eyelid, cool expressive look", "pale blue eyes, double eyelid, sharp clear gaze"],
+  "Chinese Native":     ["narrow almond-shaped dark eyes, single eyelid, calm gaze", "almond eyes, subtle double eyelid, bright expression", "wide monolid brown-black eyes, smooth epicanthal fold"],
+  "Javanese":           ["dark almond-shaped eyes, natural single eyelid, soft gaze", "wide dark eyes, single eyelid, warm gentle expression", "deep-set dark brown eyes, sleepy lidded look"],
+};
+
+interface GenerateCharacterParams {
+  gender?:     "male" | "female";
+  ageId?:      string;  // AGE_RANGE_OPTIONS.id
+  ethnicityId?: string; // ETHNICITY_OPTIONS.id
+}
+
+function generateRandomCharacter(params?: GenerateCharacterParams): Character {
+  const gender: "male" | "female" = params?.gender ?? (Math.random() > 0.5 ? "female" : "male");
+
+  // Resolve ethnicity
+  let ethnicity: string;
+  if (!params?.ethnicityId || params.ethnicityId === "Random") {
+    ethnicity = pick(["Indonesian Native", "Tionghoa", "Indo-Caucasian", "Caucasian", "Asian", "European", "Russian", "Chinese Native", "Javanese", "African", "Asian-Caucasian"]);
+  } else {
+    ethnicity = params.ethnicityId;
+  }
+
+  // Resolve age
+  let agePrompt: string;
+  if (!params?.ageId) {
+    agePrompt = pick(RANDOM_POOLS.age);
+  } else {
+    agePrompt = AGE_RANGE_OPTIONS.find((a) => a.id === params.ageId)?.prompt ?? pick(RANDOM_POOLS.age);
+  }
+
+  // Ethnicity-specific name pools
   let namePool: string[];
-  if (ethnicity === "Tionghoa") {
+  if (ethnicity === "Tionghoa" || ethnicity === "Chinese Native") {
     namePool = gender === "female"
-      ? ["Jessica", "Cindy", "Natasha", "Angelica", "Stephanie", "Clarissa", "Vanessa", "Felicia"]
-      : ["Vincent", "Andy", "Felix", "Steven", "Raymond", "Kevin", "Jason", "Wilson"];
-  } else if (ethnicity === "Indo-Caucasian") {
+      ? ["Jessica", "Cindy", "Natasha", "Angelica", "Stephanie", "Clarissa", "Vanessa", "Felicia", "Jennifer", "Melissa"]
+      : ["Vincent", "Andy", "Felix", "Steven", "Raymond", "Kevin", "Jason", "Wilson", "Michael", "Richard"];
+  } else if (ethnicity === "Indo-Caucasian" || ethnicity === "Asian-Caucasian") {
     namePool = gender === "female"
-      ? ["Nadia", "Vanessa", "Natasha", "Clarissa", "Bianca", "Stella", "Ariel", "Zara"]
-      : ["Adrian", "Ryan", "Evan", "Marco", "Dion", "Aldo", "Rafael", "Rafi"];
+      ? ["Nadia", "Vanessa", "Natasha", "Clarissa", "Bianca", "Stella", "Ariel", "Zara", "Mia", "Sophia"]
+      : ["Adrian", "Ryan", "Evan", "Marco", "Dion", "Aldo", "Rafael", "Rafi", "Leon", "Alex"];
+  } else if (ethnicity === "Caucasian" || ethnicity === "European") {
+    namePool = gender === "female"
+      ? ["Emma", "Olivia", "Sophia", "Isabella", "Mia", "Ava", "Charlotte", "Amelia", "Harper", "Evelyn"]
+      : ["James", "Oliver", "William", "Henry", "Thomas", "George", "Samuel", "Alexander", "Lucas", "Liam"];
+  } else if (ethnicity === "African") {
+    namePool = gender === "female"
+      ? ["Amara", "Zuri", "Aisha", "Fatima", "Imani", "Nia", "Jasmine", "Aaliyah", "Naomi", "Layla"]
+      : ["Kwame", "Ibrahim", "Omar", "Malik", "Kofi", "Jalen", "Darius", "Marcus", "Emmanuel", "Elijah"];
+  } else if (ethnicity === "Russian") {
+    namePool = gender === "female"
+      ? ["Anastasia", "Natasha", "Oksana", "Tatiana", "Katerina", "Alina", "Sofia", "Daria", "Polina", "Masha"]
+      : ["Alexei", "Dmitri", "Ivan", "Nikolai", "Sergei", "Vladimir", "Mikhail", "Andrei", "Pavel", "Artem"];
+  } else if (ethnicity === "Asian") {
+    namePool = gender === "female"
+      ? ["Yuki", "Sakura", "Hana", "Mei", "Rin", "Sora", "Aoi", "Nana", "Yuna", "Mika"]
+      : ["Kenji", "Hiroshi", "Takeshi", "Ryu", "Kenta", "Yuki", "Sho", "Daiki", "Kazuki", "Naoki"];
   } else {
     namePool = gender === "female" ? RANDOM_POOLS.femaleName : RANDOM_POOLS.maleName;
   }
 
   const name    = pick(namePool);
-  const age     = pick(RANDOM_POOLS.age);
   const outfit  = pick(gender === "female" ? RANDOM_POOLS.femaleOutfit : RANDOM_POOLS.maleOutfit);
 
-  // Ethnicity-specific physical overrides
-  let ethnicityLabel: string;
-  let skinOverride: string | null = null;
-  let eyeOverride: string | null  = null;
-  let noseOverride: string | null = null;
+  // Ethnicity label for prompt
+  const ethnicityLabel = ETHNICITY_LABEL_MAP[ethnicity] ?? `${ethnicity} features`;
 
-  if (ethnicity === "Tionghoa") {
-    ethnicityLabel = "Indonesian Chinese Tionghoa";
-    skinOverride   = pick(["fair porcelain skin, cool pink undertone", "fair warm ivory skin, light golden undertone", "light beige skin, neutral undertone"]);
-    eyeOverride    = pick(["narrow almond-shaped dark eyes, prominent single eyelid, smooth epicanthal fold", "wide monolid dark brown eyes, calm steady expression", "almond-shaped eyes, subtle double eyelid, bright gaze"]);
-    noseOverride   = pick(["small refined nose, straight slim bridge", "small button nose, straight slim bridge"]);
-  } else if (ethnicity === "Indo-Caucasian") {
-    ethnicityLabel = "Indonesian Eurasian Indo-Caucasian";
-    skinOverride   = pick(["warm honey skin, mixed golden-fair undertone", "light warm beige skin, peachy-golden undertone", "fair warm ivory skin, soft golden undertone"]);
-    eyeOverride    = pick(["deep-set light brown eyes, natural double eyelid, expressive gaze", "hazel almond-shaped eyes, mixed light-brown tone, bright expression", "warm brown eyes, natural double eyelid, relaxed gaze"]);
-    noseOverride   = pick(["straight refined nose, medium bridge, neat tip", "slightly elevated nose bridge, refined straight nose"]);
-  } else {
-    ethnicityLabel = `Indonesian ${gender}, ${ethnicity} features`;
-  }
+  // Skin / eye overrides from ethnicity maps
+  const skinPool = ETHNICITY_SKIN_MAP[ethnicity] ?? RANDOM_POOLS.skin;
+  const eyePool  = ETHNICITY_EYE_MAP[ethnicity]  ?? RANDOM_POOLS.eyes;
+
+  const skinOverride = pick(skinPool);
+  const eyeOverride  = pick(eyePool);
+  const noseOverride: string | null =
+    (ethnicity === "Tionghoa" || ethnicity === "Chinese Native" || ethnicity === "Asian")
+      ? pick(["small refined nose, straight slim bridge", "small button nose, straight slim bridge"])
+      : (ethnicity === "Indo-Caucasian" || ethnicity === "Asian-Caucasian")
+        ? pick(["straight refined nose, medium bridge, neat tip", "slightly elevated nose bridge, refined straight nose"])
+        : null;
 
   const extra = [
     ethnicityLabel,
     pick(RANDOM_POOLS.faceShape),
-    eyeOverride  ?? pick(RANDOM_POOLS.eyes),
+    eyeOverride,
     pick(RANDOM_POOLS.eyebrows),
     pick(gender === "female" ? RANDOM_POOLS.hair.female : RANDOM_POOLS.hair.male),
-    skinOverride ?? pick(RANDOM_POOLS.skin),
+    skinOverride,
     noseOverride ?? pick(RANDOM_POOLS.nose),
     pick(RANDOM_POOLS.lips),
     pick(gender === "female" ? RANDOM_POOLS.build.female : RANDOM_POOLS.build.male),
-    "smooth clear skin, youthful complexion",
+    "smooth clear skin",
     "neutral confident expression",
-  ].join(", ");
+  ].filter(Boolean).join(", ");
 
-  return { name, gender: gender as "male" | "female", ethnicity: "indonesian", age, outfit, extra };
+  return { name, gender, ethnicity: ethnicity.toLowerCase().replace(/\s+/g, "_"), age: agePrompt, outfit, extra };
 }
 
 // ── Angle/variation prompt — used in Step 2 (16 camera angles × 4 expressions) ─
@@ -857,6 +966,11 @@ export default function CharacterBuilderPage() {
   const [customName,    setCustomName]    = useState(""); // editable name override
   const [useCustom,     setUseCustom]     = useState(false);
 
+  // Attribute selector — gender / age / ethnicity — used when generating random character
+  const [selGender,    setSelGender]    = useState<"female" | "male">("female");
+  const [selAgeId,     setSelAgeId]     = useState<string>("20-30");
+  const [selEthnicity, setSelEthnicity] = useState<string>("Indonesian Native");
+
   // Results from each step
   const [step1Image,   setStep1Image]   = useState<string | null>(null); // base64 data URL
   const [step2Images,  setStep2Images]  = useState<{ name: string; image: string; expression: string }[]>([]); // 64 angles (16 × 4 expr)
@@ -893,6 +1007,11 @@ export default function CharacterBuilderPage() {
   const [trainingLoraUrl,     setTrainingLoraUrl]      = useState<string | null>(null);
   const trainingPollRef    = useRef<ReturnType<typeof setInterval> | null>(null);
   const trainingElapsedRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  // Live step-progress from Modal _jobs_dict (updated every log_every steps)
+  const [trainingCurrentStep, setTrainingCurrentStep] = useState<number | null>(null);
+  const [trainingTotalSteps,  setTrainingTotalSteps]  = useState<number | null>(null);
+  const [trainingLoss,        setTrainingLoss]        = useState<number | null>(null);
+  const [trainingEtaMin,      setTrainingEtaMin]      = useState<number | null>(null);
 
   // Step statuses
   const initSteps = (): Record<number, StepState> => ({
@@ -1787,9 +1906,20 @@ export default function CharacterBuilderPage() {
         status: "running" | "done" | "error" | "unknown";
         results?: { ok: boolean; cloudinary_url?: string; lora_name?: string; error?: string }[];
         message: string;
+        // Live step progress from Modal _jobs_dict
+        current_step?: number | null;
+        total_steps?:  number | null;
+        loss?:         number | null;
+        eta_min?:      number | null;
+        elapsed_min?:  number | null;
       };
       if (!data.ok) return;
       setTrainingMsg(data.message);
+      // Update live step progress whenever we get data
+      if (data.current_step != null) setTrainingCurrentStep(data.current_step);
+      if (data.total_steps  != null) setTrainingTotalSteps(data.total_steps);
+      if (data.loss         != null) setTrainingLoss(data.loss);
+      if (data.eta_min      != null) setTrainingEtaMin(data.eta_min);
       if (data.status === "done" || data.status === "error") {
         if (trainingPollRef.current)    clearInterval(trainingPollRef.current);
         if (trainingElapsedRef.current) clearInterval(trainingElapsedRef.current);
@@ -1808,6 +1938,11 @@ export default function CharacterBuilderPage() {
     setTrainingMsg("⏳ Mengirim dataset ke Modal GPU...");
     setTrainingJobId(null);
     setTrainingPollElapsed(0);
+    // Reset live progress state
+    setTrainingCurrentStep(null);
+    setTrainingTotalSteps(null);
+    setTrainingLoss(null);
+    setTrainingEtaMin(null);
     if (trainingPollRef.current)    clearInterval(trainingPollRef.current);
     if (trainingElapsedRef.current) clearInterval(trainingElapsedRef.current);
 
@@ -2044,47 +2179,120 @@ export default function CharacterBuilderPage() {
           <Sparkles size={15} className="text-primary" /> 1. Pilih Karakter
         </h2>
 
-        {/* Preset chips */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-          {PRESET_CHARACTERS.map((c) => (
-            <button
-              key={c.name}
-              onClick={() => { setSelectedChar(c); setUseCustom(false); setCustomName(""); }}
-              className={`rounded-lg border p-3 text-left transition-all
-                ${!useCustom && selectedChar.name === c.name
-                  ? "border-primary bg-primary/5"
-                  : "border-stroke dark:border-strokedark hover:border-primary/50"
-                }`}
-            >
-              <div className="flex items-center gap-1.5 mb-1">
-                <span className="text-sm">{c.gender === "female" ? "👩" : "👨"}</span>
-                <span className="font-semibold text-sm text-black dark:text-white">{c.name}</span>
-              </div>
-              <p className="text-[10px] text-body">{c.ethnicity.replace("_", " ")}, {c.age}</p>
-              <p className="text-[10px] text-body truncate">{c.outfit}</p>
-            </button>
-          ))}
+        {/* ── Gender ── */}
+        <div>
+          <label className="form-label text-[11px] mb-1.5 block">Gender</label>
+          <div className="flex gap-2">
+            {(["female", "male"] as const).map((g) => (
+              <button
+                key={g}
+                onClick={() => setSelGender(g)}
+                className={`flex-1 flex items-center justify-center gap-2 rounded-lg border py-2.5 text-sm font-medium transition-all
+                  ${selGender === g
+                    ? "border-primary bg-primary/10 text-primary"
+                    : "border-stroke dark:border-strokedark text-body hover:border-primary/50"
+                  }`}
+              >
+                <span>{g === "female" ? "👩" : "👨"}</span>
+                <span>{g === "female" ? "Female" : "Male"}</span>
+              </button>
+            ))}
+          </div>
         </div>
 
-        {/* Random generate button */}
-        <div className="flex items-center gap-2">
+        {/* ── Age Range ── */}
+        <div>
+          <label className="form-label text-[11px] mb-1.5 block">Usia</label>
+          <div className="flex flex-wrap gap-1.5">
+            {AGE_RANGE_OPTIONS.map((a) => (
+              <button
+                key={a.id}
+                onClick={() => setSelAgeId(a.id)}
+                className={`rounded-full border px-3 py-1 text-xs font-medium transition-all
+                  ${selAgeId === a.id
+                    ? "border-primary bg-primary text-white"
+                    : "border-stroke dark:border-strokedark text-body hover:border-primary/50 hover:text-primary"
+                  }`}
+              >
+                {a.label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* ── Ethnicity ── */}
+        <div>
+          <label className="form-label text-[11px] mb-1.5 block">Ethnicity</label>
+          <div className="flex flex-wrap gap-1.5">
+            {ETHNICITY_OPTIONS.map((e) => (
+              <button
+                key={e.id}
+                onClick={() => setSelEthnicity(e.id)}
+                className={`rounded-full border px-3 py-1 text-xs font-medium transition-all flex items-center gap-1
+                  ${selEthnicity === e.id
+                    ? "border-primary bg-primary text-white"
+                    : "border-stroke dark:border-strokedark text-body hover:border-primary/50 hover:text-primary"
+                  }`}
+              >
+                <span>{e.flag}</span>
+                <span>{e.label}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* ── Generate button ── */}
+        <div className="flex items-center gap-3">
           <button
             onClick={() => {
-              const r = generateRandomCharacter();
+              const r = generateRandomCharacter({
+                gender:      selGender,
+                ageId:       selAgeId,
+                ethnicityId: selEthnicity,
+              });
               setCustomChar(r);
               setCustomName(r.name);
               setUseCustom(true);
             }}
-            className="flex items-center gap-2 rounded-lg border border-dashed border-primary/50 bg-primary/5 px-4 py-2.5 text-sm font-medium text-primary hover:bg-primary/10 hover:border-primary transition-colors"
+            className="flex items-center gap-2 rounded-lg border border-primary bg-primary/5 px-5 py-2.5 text-sm font-semibold text-primary hover:bg-primary/15 transition-colors"
           >
-            <Sparkles size={14} /> Generate Random Character
+            <Sparkles size={14} /> Generate Karakter
           </button>
           {useCustom && customChar && (
-            <span className="text-xs text-body">
-              {customChar.gender === "female" ? "👩" : "👨"} {customChar.ethnicity}, {customChar.age} · {customChar.outfit}
-            </span>
+            <div className="text-[11px] text-body leading-relaxed">
+              <span className="font-semibold text-black dark:text-white">{customChar.name}</span>
+              {" · "}{customChar.age}
+              {" · "}{customChar.ethnicity.replace(/_/g, " ")}
+            </div>
           )}
         </div>
+
+        {/* Preset quick-select — collapsed by default */}
+        <details className="group">
+          <summary className="text-[11px] text-body/70 cursor-pointer hover:text-primary select-none list-none flex items-center gap-1">
+            <ChevronDown size={12} className="group-open:rotate-180 transition-transform" />
+            Atau pilih karakter preset
+          </summary>
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 mt-2">
+            {PRESET_CHARACTERS.map((c) => (
+              <button
+                key={c.name}
+                onClick={() => { setSelectedChar(c); setUseCustom(false); setCustomName(""); }}
+                className={`rounded-lg border p-2.5 text-left transition-all
+                  ${!useCustom && selectedChar.name === c.name
+                    ? "border-primary bg-primary/5"
+                    : "border-stroke dark:border-strokedark hover:border-primary/50"
+                  }`}
+              >
+                <div className="flex items-center gap-1.5 mb-0.5">
+                  <span className="text-sm">{c.gender === "female" ? "👩" : "👨"}</span>
+                  <span className="font-semibold text-xs text-black dark:text-white">{c.name}</span>
+                </div>
+                <p className="text-[10px] text-body">{c.ethnicity.replace(/_/g, " ")}, {c.age}</p>
+              </button>
+            ))}
+          </div>
+        </details>
 
         {/* Character name editor — always visible, allows renaming any char */}
         <div>
@@ -2664,13 +2872,44 @@ export default function CharacterBuilderPage() {
                   </div>
                 </div>
               )}
-              {/* Progress bar — estimate 20 min = 1200s for actor */}
-              <div className="w-full bg-gray dark:bg-meta-4 rounded-full h-1.5 overflow-hidden">
-                <div
-                  className="h-full bg-primary rounded-full transition-all duration-1000"
-                  style={{ width: `${Math.min(95, (trainingPollElapsed / 1200) * 100)}%` }}
-                />
-              </div>
+              {/* Progress bar — real step data from Modal when available, fallback to time estimate */}
+              {trainingCurrentStep && trainingTotalSteps ? (
+                <div className="space-y-1.5">
+                  <div className="flex justify-between items-center text-xs text-body">
+                    <span>Step {trainingCurrentStep.toLocaleString()} / {trainingTotalSteps.toLocaleString()}</span>
+                    <span className="font-mono font-semibold text-primary">
+                      {Math.round((trainingCurrentStep / trainingTotalSteps) * 100)}%
+                    </span>
+                  </div>
+                  <div className="w-full bg-gray dark:bg-meta-4 rounded-full h-2 overflow-hidden">
+                    <div
+                      className="h-full bg-primary rounded-full transition-all duration-500"
+                      style={{ width: `${(trainingCurrentStep / trainingTotalSteps) * 100}%` }}
+                    />
+                  </div>
+                  <div className="flex justify-between text-[10px] text-body/60">
+                    {trainingLoss != null && (
+                      <span>Loss: <span className="font-mono">{trainingLoss.toFixed(4)}</span></span>
+                    )}
+                    {trainingEtaMin != null && trainingEtaMin > 0 ? (
+                      <span>ETA ~<span className="font-mono">{trainingEtaMin.toFixed(0)}</span> min</span>
+                    ) : trainingCurrentStep >= trainingTotalSteps ? (
+                      <span>Finishing up...</span>
+                    ) : null}
+                  </div>
+                </div>
+              ) : (
+                /* Fallback: client-side time estimate (before first poll with step data) */
+                <div className="space-y-1">
+                  <div className="w-full bg-gray dark:bg-meta-4 rounded-full h-1.5 overflow-hidden">
+                    <div
+                      className="h-full bg-primary rounded-full transition-all duration-1000"
+                      style={{ width: `${Math.min(95, (trainingPollElapsed / 1200) * 100)}%` }}
+                    />
+                  </div>
+                  <p className="text-[10px] text-body/60">Menunggu data step dari Modal GPU...</p>
+                </div>
+              )}
               <div className="flex gap-2">
                 <p className="text-[10px] text-body/60 flex-1">
                   ℹ Training ~15–25 menit di Modal A100-80GB. Anda bisa navigasi ke halaman lain — training tetap berjalan.

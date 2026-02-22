@@ -8,12 +8,15 @@
  * Both share the same Modal Dict, so one polling endpoint handles both.
  *
  * Response JSON:
- *   { ok, job_id, status, results, total_time, total_cost_usd, message }
+ *   { ok, job_id, status, results, total_time, total_cost_usd, message,
+ *     current_step, total_steps, loss, eta_min, elapsed_min }
  *
  *   status: "running" | "done" | "error" | "unknown"
  *   results: [{
  *     name, gpu, ok, lora_name, cloudinary_url, steps, time, cost_usd, error
  *   }]
+ *   current_step, total_steps: live training step progress (available during "running")
+ *   loss, eta_min, elapsed_min: live training metrics from Modal Dict
  */
 
 import { NextRequest, NextResponse } from "next/server";
@@ -76,6 +79,12 @@ export async function GET(req: NextRequest) {
       started_at?:     number;
       message?:        string;
       error?:          string;
+      // Live training step progress — updated every log_every steps in modal_app.py
+      current_step?:   number;
+      total_steps?:    number;
+      loss?:           number;
+      eta_min?:        number;
+      elapsed_min?:    number;
     };
 
     return NextResponse.json({
@@ -87,6 +96,12 @@ export async function GET(req: NextRequest) {
       total_cost_usd:  result.total_cost_usd ?? null,
       started_at:      result.started_at ?? null,
       message:         result.message ?? result.error ?? "",
+      // Live training progress (null when not yet available)
+      current_step:    result.current_step  ?? null,
+      total_steps:     result.total_steps   ?? null,
+      loss:            result.loss          ?? null,
+      eta_min:         result.eta_min       ?? null,
+      elapsed_min:     result.elapsed_min   ?? null,
     });
 
   } catch (err: unknown) {

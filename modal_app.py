@@ -1666,6 +1666,9 @@ def train_lora_endpoint(item: dict) -> dict:
     steps        = int(item.get("steps",    2500 if lora_type == "actor" else 800))   # Flux best practice: 2500 (was 1500)
     lr           = float(item.get("lr",     2e-5 if lora_type == "actor" else 1e-4))  # Flux best practice: 2e-5 (was 5e-5)
     rank         = int(item.get("rank",     32   if lora_type == "actor" else 16))
+    # job_id is passed by run_training() so we can persist step progress to _jobs_dict
+    # and make it visible via the /status endpoint during training
+    progress_job_id = item.get("job_id")   # str | None
 
     if not frames:
         return {"ok": False, "error": "No frames provided"}
@@ -1843,6 +1846,26 @@ def train_lora_endpoint(item: dict) -> dict:
                     eta_m       = (elapsed_m / global_step) * (steps - global_step)
                     current_lr  = scheduler.get_last_lr()[0]
                     print(f"  step {global_step}/{steps} | loss={loss.item():.4f} | lr={current_lr:.2e} | {elapsed_m:.1f}min elapsed | ~{eta_m:.1f}min left")
+
+                    # Persist live progress to _jobs_dict so /status endpoint shows real step count
+                    if progress_job_id:
+                        try:
+                            _cur = _jobs_dict.get(progress_job_id) or {}
+                            _jobs_dict[progress_job_id] = {
+                                **_cur,
+                                "current_step": global_step,
+                                "total_steps":  steps,
+                                "loss":         round(loss.item(), 4),
+                                "eta_min":      round(max(eta_m, 0), 1),
+                                "elapsed_min":  round(elapsed_m, 1),
+                                "message": (
+                                    f"⏳ Training step {global_step:,}/{steps:,} "
+                                    f"({round(global_step / steps * 100)}%) | "
+                                    f"loss={loss.item():.4f} | ETA ~{eta_m:.0f}m"
+                                ),
+                            }
+                        except Exception as _pe:
+                            print(f"  [progress] Dict update skipped: {_pe}")  # non-fatal
 
         print(f"[train-lora] Training done in {(time.time()-t0)/60:.1f} min")
 
@@ -2279,6 +2302,7 @@ def _train_single_start(item: dict) -> dict:
                 "steps":        int(item.get("steps", 2500 if lora_type == "actor" else 800)),
                 "lr":           float(item.get("lr", 2e-5 if lora_type == "actor" else 1e-4)),
                 "rank":         int(item.get("rank", 32 if lora_type == "actor" else 16)),
+                "job_id":       job_id,   # enables live step progress via _jobs_dict
             }
 
             resp    = req_lib.post(TRAIN_URL, json=payload, timeout=3600)
