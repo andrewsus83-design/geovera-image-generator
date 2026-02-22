@@ -847,6 +847,9 @@ export default function CharacterBuilderPage() {
   const [roleModelCustomText, setRoleModelCustomText] = useState<string>("");
   const [personalityOpen,     setPersonalityOpen]     = useState<boolean>(false);
 
+  // Kling resume polling — stores task_id when video is still processing after initial submit
+  const [pendingKlingTaskId, setPendingKlingTaskId] = useState<string | null>(null);
+
   // Auto-training state — fire-and-forget after Step 5
   const [trainingJobId,       setTrainingJobId]       = useState<string | null>(null);
   const [trainingPollElapsed, setTrainingPollElapsed]  = useState(0);
@@ -1079,6 +1082,64 @@ export default function CharacterBuilderPage() {
     return allAngles;
   };
 
+  // ── KLING HELPERS ────────────────────────────────────────────────────────────
+
+  /**
+   * Poll /api/kling/video-status every 5s until Kling finishes the video.
+   * Used as fallback when the initial extract-frames request times out (202 status).
+   * Returns the CDN video URL when status === "succeed".
+   */
+  const pollKlingUntilReady = async (taskId: string): Promise<string> => {
+    const deadline = Date.now() + 5 * 60_000; // 5 more minutes
+    let attempt = 0;
+    while (Date.now() < deadline) {
+      await new Promise((r) => setTimeout(r, 5000));
+      attempt++;
+      updateStep(3, {
+        msg:      `Waiting for Kling video... attempt ${attempt} (task …${taskId.slice(-8)})`,
+        progress: 20 + Math.min(attempt * 3, 25),
+      });
+
+      try {
+        const r = await fetch(`/api/kling/video-status?task_id=${encodeURIComponent(taskId)}`);
+        if (!r.ok) continue; // transient error — keep polling
+        const d = await r.json() as { status: string; video_url: string | null; error?: string };
+
+        if (d.status === "succeed" && d.video_url) return d.video_url;
+        if (d.status === "failed") throw new Error("Kling video generation failed.");
+        // still processing → continue loop
+      } catch (err) {
+        if (err instanceof Error && err.message.includes("failed")) throw err; // propagate real failure
+        // ignore transient network errors
+      }
+    }
+    throw new Error(
+      `Kling video timeout after 5 minutes (task: ${taskId}). Please retry Step 3.`
+    );
+  };
+
+  /**
+   * Download a Kling CDN video via the proxy route and convert to base64.
+   * Direct browser fetch of Kling CDN URLs fails due to CORS.
+   */
+  const downloadVideoAsB64 = async (videoUrl: string): Promise<string> => {
+    const proxyUrl = `/api/kling/proxy-video?url=${encodeURIComponent(videoUrl)}`;
+    const r = await fetch(proxyUrl);
+    if (!r.ok) {
+      const errText = await r.text().catch(() => r.statusText);
+      throw new Error(`Could not download Kling video: ${errText.slice(0, 100)}`);
+    }
+    const buf   = await r.arrayBuffer();
+    const bytes = new Uint8Array(buf);
+    let binary  = "";
+    // Convert ArrayBuffer → base64 in chunks to avoid call stack overflow
+    const CHUNK = 0x8000;
+    for (let i = 0; i < bytes.length; i += CHUNK) {
+      binary += String.fromCharCode(...bytes.subarray(i, i + CHUNK));
+    }
+    return btoa(binary);
+  };
+
   // ── STEP 3: Kling 360° video → extract frames ─────────────────────────────
   // Uses start frame (Step 1 source) + end frame (back-view from Step 2 angles)
   // so Kling generates a real 360° rotation instead of guessing.
@@ -1159,14 +1220,38 @@ export default function CharacterBuilderPage() {
     };
 
     if (data.error) throw new Error(data.error);
-    if (!data.video_b64) {
-      // Distinguish timeout/still-processing from other failures for better UX
-      if (data.status === "processing") {
-        throw new Error(
-          `Kling masih memproses video (task: ${data.task_id ?? "?"}).\n` +
-          `Ini biasanya terjadi karena server timeout. Coba jalankan Step 3 lagi.`
-        );
-      }
+
+    // ── Resolve video_b64 via 3 paths ──────────────────────────────────────
+    // Path A: Server returned video_b64 directly (normal fast path)
+    // Path B: Server timed out, video still processing → poll + proxy-download
+    // Path C: Server got video_url but CDN download failed → proxy-download directly
+    let resolvedVideoB64: string;
+    let resolvedVideoMime: string = data.video_mime ?? "video/mp4";
+
+    if (data.video_b64) {
+      // Path A — normal
+      resolvedVideoB64 = data.video_b64;
+
+    } else if (data.status === "processing" && data.task_id) {
+      // Path B — Vercel function timed out while Kling was still rendering
+      // Auto-resume: poll video-status until the video is ready, then download
+      setPendingKlingTaskId(data.task_id);
+      updateStep(3, {
+        msg:      `⏳ Kling masih rendering video... (task …${data.task_id.slice(-8)})`,
+        progress: 18,
+      });
+      const videoUrl = await pollKlingUntilReady(data.task_id);
+      setPendingKlingTaskId(null);
+
+      updateStep(3, { msg: "Downloading video...", progress: 45 });
+      resolvedVideoB64 = await downloadVideoAsB64(videoUrl);
+
+    } else if (data.video_url) {
+      // Path C — Server got video_url but CDN download failed server-side
+      updateStep(3, { msg: "Downloading video...", progress: 45 });
+      resolvedVideoB64 = await downloadVideoAsB64(data.video_url);
+
+    } else {
       const detail = data.status ?? "no video_b64 in response";
       throw new Error(`Step 3 gagal: ${detail}. Coba ulangi Step 3.`);
     }
@@ -1174,8 +1259,8 @@ export default function CharacterBuilderPage() {
     updateStep(3, { msg: "Extracting frames from 360° video...", progress: 50 });
 
     const frames = await extractFramesFromVideoB64(
-      data.video_b64,
-      data.video_mime ?? "video/mp4",
+      resolvedVideoB64,
+      resolvedVideoMime,
       numFrames,
       (n, total) => {
         updateStep(3, {
@@ -1781,6 +1866,48 @@ export default function CharacterBuilderPage() {
     }
   };
 
+  // ── RETRY STEP 3 — re-run Kling 360° without re-running Steps 1 & 2 ──────
+  // Available when Step 3 errors out (e.g. Kling timeout) and Steps 1+2 are cached.
+  const retryStep3 = async () => {
+    if (!step1Image) return;
+    setGlobalRunning(true);
+    setPendingKlingTaskId(null);
+    updateStep(3, { status: "running", msg: "Retrying Kling 360°...", progress: 0 });
+    updateStep(4, { status: "idle",    msg: "",                        progress: 0 });
+    updateStep(5, { status: "idle",    msg: "",                        progress: 0 });
+
+    try {
+      const s3 = await runStep3(step1Image, step2Images);
+      setStep3Frames(s3);
+      saveCache(step1Image, step2Images, s3, step6Images);
+
+      const { url, filename } = await runStep4(s3, step2Images, step6Images);
+      setZipUrl(url);
+      setZipFilename(filename);
+      runStep5();
+
+      // Re-start auto training with new frames
+      const trainFrames = step2Images.map((a) => a.image)
+        .concat(s3)
+        .concat(step6Images.map((r) => r.image));
+      const trainCaptions = [
+        ...step2Images.map((a) => {
+          const exprDef  = ANCHOR_EXPRESSIONS.find((e) => e.id === a.expression);
+          const exprDesc = exprDef ? exprDef.prompt : a.expression;
+          return `ohwx, ${a.name.toLowerCase()} view, ${exprDesc}, white studio background, professional lighting`;
+        }),
+        ...s3.map(() => `ohwx, 360 degree rotation, white studio background, professional lighting`),
+        ...step6Images.map((r) => r.caption),
+      ];
+      await startAutoTraining(trainFrames, trainCaptions);
+
+    } catch (err) {
+      markRunningAsError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setGlobalRunning(false);
+    }
+  };
+
   const downloadZip = () => {
     if (!zipUrl) return;
     const a = document.createElement("a");
@@ -2277,6 +2404,24 @@ export default function CharacterBuilderPage() {
         )}
         {(steps[3].status === "running") && (
           <ProgressBar value={steps[3].progress} label={steps[3].msg} />
+        )}
+        {/* Pending task ID pill — shown while auto-polling Kling */}
+        {pendingKlingTaskId && steps[3].status === "running" && (
+          <p className="text-[10px] text-body/60 text-center font-mono">
+            Kling task: {pendingKlingTaskId}
+          </p>
+        )}
+        {/* Retry Step 3 button — shown when Step 3 errors out but Steps 1+2 are cached */}
+        {steps[3].status === "error" && step1Image && (
+          <button
+            onClick={retryStep3}
+            disabled={globalRunning}
+            className="w-full text-sm px-4 py-2 rounded-lg bg-warning/10 border border-warning/30
+                       text-warning hover:bg-warning/20 disabled:opacity-40 disabled:cursor-not-allowed
+                       flex items-center justify-center gap-2 transition-colors"
+          >
+            <span>🔄</span> Retry Step 3 (Kling 360°) — tanpa re-run Step 1 &amp; 2
+          </button>
         )}
 
         {/* Step 6 — shown if roles or personality scenes selected */}
