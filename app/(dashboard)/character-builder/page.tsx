@@ -344,14 +344,32 @@ const PRESET_CHARACTERS: Character[] = [
   },
 ];
 
-// ── Prompt builder — highly detailed Indonesian anchor for strong LoRA ─────────
-// Uses "Indonesian" ethnicity label + exhaustive physical descriptors.
+// ── Ethnicity label resolver ───────────────────────────────────────────────────
+// Converts stored ethnicity slug (e.g. "japanese", "korean", "indonesian_native")
+// to a human-readable prompt label. Works for both new attribute-generated chars
+// and legacy preset chars (which store "indonesian" as the slug).
+function getEthnicityLabel(c: Character): string {
+  const slug = c.ethnicity; // stored as lowercase_with_underscores by generateRandomCharacter
+  // Reconstruct original ETHNICITY_LABEL_MAP key: snake_case → Title Case
+  const reconstructed = slug
+    .split("_")
+    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+    .join(" ");
+  if (ETHNICITY_LABEL_MAP[reconstructed]) return ETHNICITY_LABEL_MAP[reconstructed];
+  // Fallback for legacy preset chars (slug === "indonesian")
+  if (slug === "indonesian") return "Indonesian";
+  return reconstructed;
+}
+
+// ── Prompt builder — ethnicity-aware anchor for LoRA ─────────────────────────
+// Uses ethnicity label from ETHNICITY_LABEL_MAP + exhaustive physical descriptors.
 // Critical: every trait listed separately → LoRA learns each feature independently
 // → consistent identity across all expressions (angry, sad, happy, surprised).
 function buildCharacterPrompt(c: Character): string {
+  const ethnicityLabel = getEthnicityLabel(c);
   return [
     // Primary identity anchor — most important line for LoRA
-    `ohwx portrait photo of Indonesian ${c.gender} in ${c.age}s`,
+    `ohwx portrait photo of ${ethnicityLabel} ${c.gender}, ${c.age}`,
     // ALL physical anchor descriptors (exhaustive for face consistency)
     c.extra,
     // Outfit context
@@ -902,8 +920,9 @@ function generateRandomCharacter(params?: GenerateCharacterParams): Character {
 // ── Angle/variation prompt — used in Step 2 (16 camera angles × 4 expressions) ─
 // Passes ALL physical descriptors to keep identity consistent across all shots
 function buildAnglePrompt(c: Character, extra: string): string {
+  const ethnicityLabel = getEthnicityLabel(c);
   return [
-    `ohwx portrait photo of Indonesian ${c.gender} in ${c.age}s`,
+    `ohwx portrait photo of ${ethnicityLabel} ${c.gender}, ${c.age}`,
     c.extra,           // full physical anchor — same for every angle
     `wearing ${c.outfit}`,
     extra,
@@ -1558,7 +1577,7 @@ export default function CharacterBuilderPage() {
 
       // Prompt for generation
       const genPrompt = [
-        `ohwx portrait photo of Indonesian ${activeChar.gender} in ${activeChar.age}s`,
+        `ohwx portrait photo of ${getEthnicityLabel(activeChar)} ${activeChar.gender}, ${activeChar.age}`,
         activeChar.extra,
         `wearing ${scene.outfit}`,
         scene.action,
@@ -1800,7 +1819,7 @@ export default function CharacterBuilderPage() {
       ``,
       `### 2. Generate Image dengan LoRA`,
       `\`\`\``,
-      `ohwx Indonesian ${activeChar.gender}, ${activeChar.extra},`,
+      `ohwx ${getEthnicityLabel(activeChar)} ${activeChar.gender}, ${activeChar.extra},`,
       `wearing ${activeChar.outfit}, smiling, outdoor background,`,
       `professional photography, 8K`,
       `\`\`\``,
@@ -1810,7 +1829,7 @@ export default function CharacterBuilderPage() {
       ...(hasRoles ? rolesUsed.map((id) => {
         const pack = ROLE_PACKS.find((p) => p.id === id);
         const scene = pack?.scenes[0];
-        return scene ? `# ${pack?.label}\nohwx Indonesian ${activeChar.gender}, ${activeChar.extra}, wearing ${scene.outfit}, ${scene.action}, ${scene.setting}` : "";
+        return scene ? `# ${pack?.label}\nohwx ${getEthnicityLabel(activeChar)} ${activeChar.gender}, ${activeChar.extra}, wearing ${scene.outfit}, ${scene.action}, ${scene.setting}` : "";
       }) : []),
       hasRoles ? `\`\`\`` : "",
       ``,
